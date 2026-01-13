@@ -22,6 +22,8 @@
     - Holds the implementation of the library
     - Actual code
     - Not directly included by users
+- `tests`
+    - Holds the test exectuables for each component of the library
 
 ## Tensor
 
@@ -42,3 +44,4 @@ What it won't have:
 `CMakeLists.txt`
 `include/tl/ops.h`
 `src/ops.cpp`
+`tests/test_tensor`
