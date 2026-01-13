@@ -45,27 +45,28 @@ Tensor::Tensor(const std::vector<int64_t>& sizes)
 
     // allocate or resize the contiguous buffer
     // vector<int64_t> owns the memory and keeps it contiguous
-    data_.resize(static_cast<size_t> n); // resize initializes to 0.0f (float)
+    data_.resize(static_cast<size_t>(n)); // resize initializes to 0.0f (float)
     
-    // mutable raw data access
-    float* Tensor::data() {
-        return data_.data();
-    }
-    
-    // inmutable raw data access
-    const float* Tensor::data() const {
-        return data_.data();
-    }
+}
 
-    // sizes accessor
-    const std::vector<int64_t>& Tensor::sizes() const {
-        return sizes_;
-    }
+// mutable raw data access
+float* Tensor::data() {
+    return data_.data();
+}
 
-    // number of elements (numel) accessor
-    int64_t Tensor::numel() const {
-        return static_cast<int64_t>(data_.size());
-    }
+// inmutable raw data access
+const float* Tensor::data() const {
+    return data_.data();
+}
+
+// sizes accessor
+const std::vector<int64_t>& Tensor::sizes() const {
+    return sizes_;
+}
+
+// number of elements (numel) accessor
+int64_t Tensor::numel() const {
+    return static_cast<int64_t>(data_.size());
 }
 
 }
