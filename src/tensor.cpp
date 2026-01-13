@@ -21,7 +21,7 @@ static int64_t compute_numel(const std::vector<int64_t>& sizes) {
     int64_t n = 1; // count number of elements
     for (int64_t d: sizes) {
         if (d < 0) {
-            throw std::invalid_argument(Tensor size must be positive integer);
+            throw std::invalid_argument("Tensor size must be positive integer");
         }
 
         if (d == 0) return 0; // if a dimension is 0, tensor has no elements
@@ -37,11 +37,11 @@ static int64_t compute_numel(const std::vector<int64_t>& sizes) {
 }
 
 // constructor to allocate contiguous storage based on sizes
-Tensor::Tensor(const std::vector<int64_t>& sizes
+Tensor::Tensor(const std::vector<int64_t>& sizes)
         : sizes_(sizes) // initialize private member to sizes
 {
     // use helper to get total numel
-    const int64_t numElements = compute_numel(sizes_);
+    const int64_t n = compute_numel(sizes_);
 
     // allocate or resize the contiguous buffer
     // vector<int64_t> owns the memory and keeps it contiguous
@@ -58,7 +58,7 @@ Tensor::Tensor(const std::vector<int64_t>& sizes
     }
 
     // sizes accessor
-    const vector<int64_t>& Tensor::sizes() const {
+    const std::vector<int64_t>& Tensor::sizes() const {
         return sizes_;
     }
 
@@ -68,9 +68,4 @@ Tensor::Tensor(const std::vector<int64_t>& sizes
     }
 }
 
-}
-
-int main() {
-    
-    return 0;
 }
