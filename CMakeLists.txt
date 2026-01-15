@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # library components
 add_library(torchlite
     src/tensor.cpp
+    src/ops.cpp
 )
 
 target_include_directories(torchlite
@@ -16,6 +17,7 @@ target_include_directories(torchlite
 # test executables
 add_executable(test_tensor
     tests/test_tensor.cpp
+
 )
 
 target_link_libraries(test_tensor
