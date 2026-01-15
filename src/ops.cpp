@@ -1,4 +1,5 @@
 #include <tl/ops.h>
+#include <cstdint> // for int64_t
 #include <stdexcept>
 #include <algorithm> // for max()
 
@@ -40,8 +41,8 @@ Tensor mul(const Tensor& a, const Tensor& b) {
     float* op = out.data();
 
     const int64_t n = a.numel();
-    for (int i = 0; i < n; ++i) {
-        op[i] = a[i] + b[i];
+    for (int64_t i = 0; i < n; ++i) {
+        op[i] = ap[i] * bp[i];
     }
 
     return out;
@@ -55,8 +56,8 @@ Tensor relu(const Tensor& a) {
     float* op = out.data();
 
     const int64_t n = a.numel();
-    for (int i = 0; i < n; ++i) {
-        op[i] = std::max(0.0f, a[i]);
+    for (int64_t i = 0; i < n; ++i) {
+        op[i] = std::max(0.0f, ap[i]);
     }
 
     return out;
