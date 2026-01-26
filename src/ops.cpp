@@ -71,7 +71,7 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
   float* op = out.data();
 
   for (int64_t i = 0; i < M; ++i) {
-    for (int64_t j = 0; i < N; ++j) {
+    for (int64_t j = 0; j < N; ++j) {
       float sum = 0.0f;
       for (int64_t k = 0; k < K; ++k) {
         // index = row * total_cols + col

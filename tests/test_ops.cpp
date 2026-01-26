@@ -40,7 +40,7 @@ int main() {
   // Row 0, Col 0: (1*7) + (2*9) + (3*11) = 58
   assert(res_matmul.data()[0] == 58.0f);
   // Row 1, Col 1: (4*8) + (5*10) + (6*12) = 154
-  assert(res_matmul.data()[1] == 154.0f);
+  assert(res_matmul.data()[3] == 154.0f);
 
   // test sigmoid
   tl::Tensor d({1, 1});
