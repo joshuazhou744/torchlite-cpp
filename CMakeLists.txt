@@ -14,12 +14,12 @@ target_include_directories(torchlite
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# test executables
-add_executable(test_tensor
-    tests/test_tensor.cpp
+# test all test files
+file(GLOB TEST_SOURCES "tests/*.cpp")
 
-)
-
-target_link_libraries(test_tensor
-    PRIVATE torchlite 
-)
+foreach(test_source ${TEST_SOURCES})
+  get_filename_component(test_name ${test_source} NAME_WE)
+  add_executable(${test_name} ${test_source})
+  target_link_libraries(${test_name} PRIVATE torchlite)
+  add_test(NAME ${test_name} COMMAND ${test_name})
+endforeach()
