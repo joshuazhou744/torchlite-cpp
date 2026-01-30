@@ -71,7 +71,7 @@ Tensor add(const Tensor& a, const Tensor& b) {
     int64_t index_a = get_broadcast_index(i, a, out_shape);
     int64_t index_b = get_broadcast_index(i, b, out_shape);
 
-    op[i] = ap[index_a] + ap[index_b];
+    op[i] = ap[index_a] + bp[index_b];
   }
   return out;
 }
@@ -93,7 +93,7 @@ Tensor mul(const Tensor& a, const Tensor& b) {
     int64_t index_a = get_broadcast_index(i, a, out_shape);
     int64_t index_b = get_broadcast_index(i, b, out_shape);
 
-    op[i] = ap[index_a] * ap[index_b];
+    op[i] = ap[index_a] * bp[index_b];
   }
   return out;
 }
@@ -103,34 +103,86 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
   const auto& s_a = a.sizes();
   const auto& s_b = b.sizes();
 
-  if (s_a.size() != 2 || s_b.size() != 2) {
-    throw std::invalid_argument("matmul requires 2D tensors");
+  if (s_a.size() < 2 || s_b.size() < 2) {
+    throw std::invalid_argument("matmul requires at least 2D tensors");
   }
 
-  if (s_a[1] != s_b[0]) {
+  // identify matrix dims
+  int64_t M = s_a[s_a.size() - 2];
+  int64_t K = s_a[s_a.size() - 1];
+  int64_t K2 = s_b[s_b.size() - 2];
+  int64_t N = s_b[s_b.size() - 1];
+
+  if (K != K2) {
     throw std::invalid_argument("Incompatible dimensions for matmul");
   }
 
-  int64_t M = s_a[0];
-  int64_t K = s_a[1];
-  int64_t N = s_b[1];
+  // determine batch dimensions
+  std::vector<int64_t> batch_a(s_a.begin(), s_a.end() - 2);
+  std::vector<int64_t> batch_b(s_b.begin(), s_b.end() - 2);
+  std::vector<int64_t> batch_out = compute_broadcast_shape(batch_a, batch_b);
 
-  Tensor out({M, N});
-  const float* ap = a.data();
-  const float* bp = b.data();
-  float* op = out.data();
+  // construct final output shape
+  std::vector<int64_t> out_shape = batch_out;
+  out_shape.push_back(M);
+  out_shape.push_back(N);
+  Tensor out(out_shape);
 
-  for (int64_t i = 0; i < M; ++i) {
-    for (int64_t j = 0; j < N; ++j) {
-      float sum = 0.0f;
-      for (int64_t k = 0; k < K; ++k) {
-        // index = row * total_cols + col
-        sum += ap[i * K + k] * bp[k * N + j];
+  // batched execution
+  int64_t num_batches = 1;
+  for (int64_t dim: batch_out) {
+    num_batches *= dim;
+  }
+  for (int64_t i = 0; i < num_batches; ++i) {
+    int64_t index_a = get_broadcast_index(i, Tensor(batch_a), batch_out) * (M * K);
+    int64_t index_b = get_broadcast_index(i, Tensor(batch_b), batch_out) * (K * N);
+
+    const float* ap = a.data() + index_a;
+    const float* bp = b.data() + index_b;
+    float* op = out.data() + (i * M * N);
+
+    for (int64_t m = 0; m < M; ++m) {
+      for (int64_t n = 0; n < N; ++n) {
+        float sum = 0.0f;
+        for (int64_t k = 0; k < K; ++k) {
+          sum += ap[m * K + k] * bp[k * N + n];
+        }
+        op[m * N + n] = sum;
       }
-      op[i * N + j] = sum;
     }
   }
+  return out;
+}
 
+// matrix transpose
+Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1) {
+  auto out_sizes = a.sizes();
+  std::swap(out_sizes[dim0], out_sizes[dim1]);
+  Tensor out(out_sizes);
+
+  const auto& a_sizes = a.sizes();
+  const auto& b_sizes = b.sizes();
+
+  for (int64_t i = 0; i < a.numel(); ++i) {
+    // convert linear index to multi-dim coords
+    std::vector<int64_t> coords(a_sizes.size());
+    int64_t temp_index = i;
+    for (int d = a_sizes.size() - 1; d >= 0; --d) {
+      coords[d] = temp_index % a_sizes[d];
+      temp_index /= a_sizes[d];
+    }
+
+    // swap coordinates for the new tensor
+    std::swap(coords[dim0], coords[dim1]);
+
+    // calculate output linear index
+    int64_t out_index = 0;
+    const auto& out_strides = out.strides();
+    for (size_t d = 0; d < out_sizes.size(); ++d) {
+      out_index += coords[d] * out_strides[d];
+    }
+    out.data()[out_index] = a.data()[i];
+  }
   return out;
 }
 

@@ -76,4 +76,9 @@ int64_t Tensor::numel() const {
     return static_cast<int64_t>(data_.size());
 }
 
+// strides accessor for higher dim tensors
+const std::vector<int64_t>& Tensor::strides() const{
+  return strides_;
+}
+
 }
