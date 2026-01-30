@@ -10,19 +10,20 @@ class Tensor {
 public:
     // construct a contiguous float tensor
     explicit Tensor(const std::vector<int64_t>& sizes);
-    
+
     // access raw data
     float* data();
     const float* data() const;
 
     // shape info
     const std::vector<int64_t>& sizes() const;
+    const std::vector<int64_t>& strides() const;
     int64_t numel() const;
 
 private:
     std::vector<int64_t> sizes_;
+    std::vector<int64_t> strides_;
     std::vector<float> data_;
-
 };
 
 }

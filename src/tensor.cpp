@@ -46,7 +46,14 @@ Tensor::Tensor(const std::vector<int64_t>& sizes)
     // allocate or resize the contiguous buffer
     // vector<int64_t> owns the memory and keeps it contiguous
     data_.resize(static_cast<size_t>(n)); // resize initializes to 0.0f (float)
-    
+
+    // calcuate strides for dimension hopping (row-major)
+    strides_.resize(sizes.size());
+    int64_t current_stride = 1;
+    for (int i = static_cast<int>(sizes.size()) - 1; i >= 0; --i) {
+      strides_[i] = current_stride;
+      current_stride *= sizes[i];
+    }
 }
 
 // mutable raw data access

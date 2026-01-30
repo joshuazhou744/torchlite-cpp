@@ -6,45 +6,95 @@
 namespace tl {
 
 // helper function to validate two tensors have same shape
-static void check_same_shape(const Tensor& a, const Tensor& b) {
-  if (a.sizes() != b.sizes()) {
-      throw std::invalid_argument("Tensor shapes must match");
+//static void check_same_shape(const Tensor& a, const Tensor& b) {
+  //if (a.sizes() != b.sizes()) {
+  //throw std::invalid_argument("Tensor shapes must match");
+//}
+//}
+
+// helper function to map a multidimensional index to a flat index considering broadcasting
+static int64_t get_broadcast_index(int64_t linear_index, const Tensor& t, const std::vector<int64_t>& target_sizes) {
+  int64_t physical_index = 0;
+  const auto& t_sizes = t.sizes();
+  const auto& t_strides = t.strides();
+  int ndim = target_sizes.size();
+  int t_ndim = t_sizes.size();
+
+  for (int i = ndim - 1; i >= 0; --i) {
+    int64_t dim_index = linear_index % target_sizes[i];
+    linear_index /= target_sizes[i];
+
+    // if dimension exists int he smaller tensor and isn't size 1, use stride
+    int t_dim_index = i - (ndim - t_ndim);
+    if (t_dim_index >= 0 && t_sizes[t_dim_index] != 1) {
+      physical_index += dim_index * t_strides[t_dim_index];
+    }
   }
+
+  return physical_index;
+}
+
+// helper function to find the final broadcasted shape
+static std::vector<int64_t> compute_broadcast_shape(const std::vector<int64_t>& a, const std::vector<int64_t>& b) {
+  int ndim_a = a.size();
+  int ndim_b = b.size();
+  int ndim_out = std::max(ndim_a, ndim_b);
+  std::vector<int64_t> out_shape(ndim_out);
+
+  for (int i = ndim_out - 1; i >= 0; --i) {
+    int64_t size_a = (i < ndim_out - ndim_a) ? 1 : a[i - (ndim_out - ndim_a)];
+    int64_t size_b = (i < ndim_out - ndim_b) ? 1 : b[i - (ndim_out - ndim_b)];
+
+    if (size_a != size_b && size_a != 1 && size_b != 1) {
+      throw std::invalid_argument("Incompatible dimensions for broadcasting");
+    }
+
+    out_shape[i] = std::max(size_a, size_b);
+  }
+  return out_shape;
 }
 
 // element-wise addition
 Tensor add(const Tensor& a, const Tensor& b) {
-  check_same_shape(a, b);
+  // determine resulting shape
+  std::vector<int64_t> out_shape = compute_broadcast_shape(a.sizes(), b.sizes());
+  Tensor out(out_shape);
 
-  Tensor out(a.sizes());
-
+  float* op = out.data();
   const float* ap = a.data();
   const float* bp = b.data();
-  float* op = out.data();
 
-  const int64_t n = a.numel();
+  // iterate through the outputs flat memory
+  const int64_t n = out.numel();
   for (int64_t i = 0; i < n; ++i) {
-      op[i] = ap[i] + bp[i];
-  }
+    // map outputs linear index to physical index
+    int64_t index_a = get_broadcast_index(i, a, out_shape);
+    int64_t index_b = get_broadcast_index(i, b, out_shape);
 
+    op[i] = ap[index_a] + ap[index_b];
+  }
   return out;
 }
 
-// element-wise multiply
+
 Tensor mul(const Tensor& a, const Tensor& b) {
-  check_same_shape(a, b);
+  // determine resulting shape
+  std::vector<int64_t> out_shape = compute_broadcast_shape(a.sizes(), b.sizes());
+  Tensor out(out_shape);
 
-  Tensor out(a.sizes());
-
+  float* op = out.data();
   const float* ap = a.data();
   const float* bp = b.data();
-  float* op = out.data();
 
-  const int64_t n = a.numel();
+  // iterate through the outputs flat memory
+  const int64_t n = out.numel();
   for (int64_t i = 0; i < n; ++i) {
-      op[i] = ap[i] * bp[i];
-  }
+    // map outputs linear index to physical index
+    int64_t index_a = get_broadcast_index(i, a, out_shape);
+    int64_t index_b = get_broadcast_index(i, b, out_shape);
 
+    op[i] = ap[index_a] * ap[index_b];
+  }
   return out;
 }
 
