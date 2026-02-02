@@ -14,8 +14,8 @@ namespace tl {
 
 // helper function to map a multidimensional index to a flat index considering broadcasting
 static int64_t get_broadcast_index(int64_t linear_index,
-                                  const std::vector<int64_t> t_sizes,
-                                  const std::vector<int64_t> t_strides,
+                                  const std::vector<int64_t>& t_sizes,
+                                  const std::vector<int64_t>& t_strides,
                                   const std::vector<int64_t>& target_sizes) {
   int64_t physical_index = 0;
   int ndim = target_sizes.size();
@@ -133,10 +133,10 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
   std::vector<int64_t> batch_b(s_b.begin(), s_b.end() - 2);
   std::vector<int64_t> batch_out = compute_broadcast_shape(batch_a, batch_b);
 
-  const auto& s_a_full = a.strides();
-  const auto& s_b_full = b.strides();
-  std::vector<int64_t> strides_a_batch(s_a.begin(), s_a.end() - 2);
-  std::vector<int64_t> strides_b_batch(s_b.begin(), s_b.end() - 2);
+  const auto& strides_a = a.strides();
+  const auto& strides_b = b.strides();
+  std::vector<int64_t> strides_a_batch(strides_a.begin(), strides_a.end() - 2);
+  std::vector<int64_t> strides_b_batch(strides_b.begin(), strides_b.end() - 2);
 
   // construct final output shape
   std::vector<int64_t> out_shape = batch_out;
