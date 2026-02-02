@@ -161,11 +161,11 @@ Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1) {
   Tensor out(out_sizes);
 
   const auto& a_sizes = a.sizes();
-  const auto& b_sizes = b.sizes();
+
+  std::vector<int64_t> coords(a_sizes.size());
 
   for (int64_t i = 0; i < a.numel(); ++i) {
     // convert linear index to multi-dim coords
-    std::vector<int64_t> coords(a_sizes.size());
     int64_t temp_index = i;
     for (int d = a_sizes.size() - 1; d >= 0; --d) {
       coords[d] = temp_index % a_sizes[d];
