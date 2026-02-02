@@ -13,10 +13,11 @@ namespace tl {
 //}
 
 // helper function to map a multidimensional index to a flat index considering broadcasting
-static int64_t get_broadcast_index(int64_t linear_index, const Tensor& t, const std::vector<int64_t>& target_sizes) {
+static int64_t get_broadcast_index(int64_t linear_index,
+                                  const std::vector<int64_t> t_sizes,
+                                  const std::vector<int64_t> t_strides,
+                                  const std::vector<int64_t>& target_sizes) {
   int64_t physical_index = 0;
-  const auto& t_sizes = t.sizes();
-  const auto& t_strides = t.strides();
   int ndim = target_sizes.size();
   int t_ndim = t_sizes.size();
 
@@ -60,6 +61,11 @@ Tensor add(const Tensor& a, const Tensor& b) {
   std::vector<int64_t> out_shape = compute_broadcast_shape(a.sizes(), b.sizes());
   Tensor out(out_shape);
 
+  const auto& sizes_a = a.sizes();
+  const auto& strides_a = a.strides();
+  const auto& sizes_b = b.sizes();
+  const auto& strides_b = b.strides();
+
   float* op = out.data();
   const float* ap = a.data();
   const float* bp = b.data();
@@ -68,8 +74,8 @@ Tensor add(const Tensor& a, const Tensor& b) {
   const int64_t n = out.numel();
   for (int64_t i = 0; i < n; ++i) {
     // map outputs linear index to physical index
-    int64_t index_a = get_broadcast_index(i, a, out_shape);
-    int64_t index_b = get_broadcast_index(i, b, out_shape);
+    int64_t index_a = get_broadcast_index(i, sizes_a, strides_a, out_shape);
+    int64_t index_b = get_broadcast_index(i, sizes_b, strides_b, out_shape);
 
     op[i] = ap[index_a] + bp[index_b];
   }
@@ -82,6 +88,11 @@ Tensor mul(const Tensor& a, const Tensor& b) {
   std::vector<int64_t> out_shape = compute_broadcast_shape(a.sizes(), b.sizes());
   Tensor out(out_shape);
 
+  const auto& sizes_a = a.sizes();
+  const auto& strides_a = a.strides();
+  const auto& sizes_b = b.sizes();
+  const auto& strides_b = b.strides();
+
   float* op = out.data();
   const float* ap = a.data();
   const float* bp = b.data();
@@ -90,8 +101,8 @@ Tensor mul(const Tensor& a, const Tensor& b) {
   const int64_t n = out.numel();
   for (int64_t i = 0; i < n; ++i) {
     // map outputs linear index to physical index
-    int64_t index_a = get_broadcast_index(i, a, out_shape);
-    int64_t index_b = get_broadcast_index(i, b, out_shape);
+    int64_t index_a = get_broadcast_index(i, sizes_a, strides_a, out_shape);
+    int64_t index_b = get_broadcast_index(i, sizes_b, strides_b, out_shape);
 
     op[i] = ap[index_a] * bp[index_b];
   }
@@ -122,6 +133,11 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
   std::vector<int64_t> batch_b(s_b.begin(), s_b.end() - 2);
   std::vector<int64_t> batch_out = compute_broadcast_shape(batch_a, batch_b);
 
+  const auto& s_a_full = a.strides();
+  const auto& s_b_full = b.strides();
+  std::vector<int64_t> strides_a_batch(s_a.begin(), s_a.end() - 2);
+  std::vector<int64_t> strides_b_batch(s_b.begin(), s_b.end() - 2);
+
   // construct final output shape
   std::vector<int64_t> out_shape = batch_out;
   out_shape.push_back(M);
@@ -133,9 +149,10 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
   for (int64_t dim: batch_out) {
     num_batches *= dim;
   }
+
   for (int64_t i = 0; i < num_batches; ++i) {
-    int64_t index_a = get_broadcast_index(i, Tensor(batch_a), batch_out) * (M * K);
-    int64_t index_b = get_broadcast_index(i, Tensor(batch_b), batch_out) * (K * N);
+    int64_t index_a = get_broadcast_index(i, batch_a, strides_a_batch, batch_out) * (M * K);
+    int64_t index_b = get_broadcast_index(i, batch_b, strides_b_batch, batch_out) * (K * N);
 
     const float* ap = a.data() + index_a;
     const float* bp = b.data() + index_b;
