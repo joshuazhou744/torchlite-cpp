@@ -151,8 +151,8 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
   }
 
   for (int64_t i = 0; i < num_batches; ++i) {
-    int64_t index_a = get_broadcast_index(i, batch_a, strides_a_batch, batch_out) * (M * K);
-    int64_t index_b = get_broadcast_index(i, batch_b, strides_b_batch, batch_out) * (K * N);
+    int64_t index_a = get_broadcast_index(i, batch_a, strides_a_batch, batch_out);
+    int64_t index_b = get_broadcast_index(i, batch_b, strides_b_batch, batch_out);
 
     const float* ap = a.data() + index_a;
     const float* bp = b.data() + index_b;
