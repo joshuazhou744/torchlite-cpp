@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint> // fixed width integer types library
+#include <ostream>
 
 namespace tl { // defines that Tensor is in the tl library
 
@@ -25,5 +26,7 @@ private:
     std::vector<int64_t> strides_;
     std::vector<float> data_;
 };
+
+  std::ostream& operator<<(std::ostream& os, const Tensor& t);
 
 }

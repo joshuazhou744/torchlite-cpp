@@ -230,4 +230,67 @@ Tensor relu(const Tensor& a) {
   return out;
 }
 
+// scale a tensor by a factor (scalar)
+Tensor scale(const Tensor& a, float scalar) {
+  Tensor out(a.sizes());
+
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = ap[i] * scalar;
+  }
+
+  return out;
+}
+
+// softmax, squeeze everything between 0-1 (into probabilities) in the last dim
+Tensor softmax(const Tensor& a) {
+  const auto& sizes = a.sizes();
+  if (sizes.empty()) {
+    throw std::invalid_argument("Softmax requires at least 1D tensor");
+  }
+
+  Tensor out(sizes);
+
+  const float* ap = a.data();
+  float* op = out.data();
+
+  // handle 1D tensors explicitly
+  if (sizes.size() == 1) {
+    const int64_t
+  }
+
+  const int64_t D = sizes.back();
+  const int64_t outer = a.numel() / D;
+
+  for (int64_t i = 0; i < outer; ++i) {
+    const float* row = ap + i * D;
+    float* out_row = op + i * D;
+
+    // find maximum
+    float max_val = row[0];
+    for (int64_t j = 1; j < D; ++j) {
+      if (row[j] > max_val) {
+        max_val = row[j];
+      }
+    }
+
+    // exp(x - max) and sum
+    float sum = 0.0f;
+    for (int64_t j = 0; j < D; ++j) {
+      out_row[i] = std::exp(row[j] - max_val);
+      sum += out_row[i];
+    }
+
+    // normalize
+    for (int64_t j = 0; j < D; ++j) {
+      out_row[i] /= sum;
+    }
+
+    return out;
+  }
+}
+
 }

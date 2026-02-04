@@ -25,4 +25,10 @@ Tensor relu(const Tensor& a);
 // Sigmoid activation function: out[i] = 1 / (1 + exp(-in[i]))
 Tensor sigmoid(const Tensor& a);
 
+// scale tensor by a scalar: out = a * scalar
+Tensor scale(const Tensor& a, float scalar);
+
+// softmax along the last dimension of a tensor
+Tensor softmax(const Tensor& a);
+
 }

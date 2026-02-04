@@ -93,6 +93,29 @@ int main() {
     assert(is_close(output.data()[i], 1.0f));
   }
 
+  // test softmax normalization and order
+  tl::Tensor softmax_tensor({3});
+  softmax_tensor.data()[0] = 1.0f;
+  softmax_tensor.data()[1] = 2.0f;
+  softmax_tensor.data()[2] = 3.0f;
+
+  tl::Tensor softmax_out = tl::softmax(softmax_tensor);
+  std::cout << softmax_out << std::endl;
+
+  float sum = softmax_out.data()[0] + softmax_out.data()[1] + softmax_out.data()[2];
+  assert(is_close(sum, 1.0f));
+  assert(softmax_out.data()[2] > softmax_out.data()[1] && softmax_out.data()[1] > softmax_out.data()[0]);
+
+  // test scale
+  tl::Tensor scale_tensor({2});
+  scale_tensor.data()[0] = 2.0f;
+  scale_tensor.data()[1] = 4.0f;
+
+  tl::Tensor scale_out = tl::scale(scale_tensor, 0.5f);
+  assert(is_close(scale_out.data()[0], 1.0f));
+  assert(is_close(scale_out.data()[1], 2.0f));
+
+
   std::cout << "tests passed" << std::endl;
   return 0;
 }

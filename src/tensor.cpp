@@ -11,8 +11,27 @@
 #include <stdexcept> // for std::invalid_argument exception
 #include <limits> // for std::numeric_limits
 #include <cstdint> // for int64_t
+#include <ostream>
 
 namespace tl {
+
+// helper to print out the tensor
+  std::ostream& operator<<(std::ostream& os, const Tensor& t) {
+    os << "Tensor(shape[";
+
+    for (size_t i = 0; i < t.sizes().size(); ++i) {
+      os << t.sizes()[i];
+      if (i + 1 < t.sizes().size()) os << ", ";
+    }
+    os << "], data=[";
+
+    for (int64_t i = 0; i < t.numel(); ++i) {
+      os << t.data()[i];
+      if (i + 1 < t.numel()) os << ", ";
+    }
+    os << "])";
+    return os;
+  }
 
 // helper to compute number of elements from sizes
 static int64_t compute_numel(const std::vector<int64_t>& sizes) {
