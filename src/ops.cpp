@@ -257,11 +257,6 @@ Tensor softmax(const Tensor& a) {
   const float* ap = a.data();
   float* op = out.data();
 
-  // handle 1D tensors explicitly
-  if (sizes.size() == 1) {
-    const int64_t
-  }
-
   const int64_t D = sizes.back();
   const int64_t outer = a.numel() / D;
 
@@ -280,17 +275,18 @@ Tensor softmax(const Tensor& a) {
     // exp(x - max) and sum
     float sum = 0.0f;
     for (int64_t j = 0; j < D; ++j) {
-      out_row[i] = std::exp(row[j] - max_val);
-      sum += out_row[i];
+      out_row[j] = std::exp(row[j] - max_val);
+      sum += out_row[j];
     }
 
     // normalize
     for (int64_t j = 0; j < D; ++j) {
-      out_row[i] /= sum;
+      out_row[j] /= sum;
     }
 
-    return out;
   }
+
+  return out;
 }
 
 }

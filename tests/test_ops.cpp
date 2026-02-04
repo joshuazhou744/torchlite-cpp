@@ -100,7 +100,6 @@ int main() {
   softmax_tensor.data()[2] = 3.0f;
 
   tl::Tensor softmax_out = tl::softmax(softmax_tensor);
-  std::cout << softmax_out << std::endl;
 
   float sum = softmax_out.data()[0] + softmax_out.data()[1] + softmax_out.data()[2];
   assert(is_close(sum, 1.0f));
