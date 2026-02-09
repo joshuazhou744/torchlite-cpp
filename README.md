@@ -1,47 +1,55 @@
+# torchlite-cpp
+
+A lightweight C++ tensor library implementing core PyTorch-like operations for CPU. Designed as a minimal foundation for building neural networks without the complexity of full frameworks.
+
+## Core Features
+
+**Tensor Operations**
+- N-dimensional tensor data structure with automatic stride calculation
+- Element-wise operations (add, multiply) with NumPy-style broadcasting
+- Matrix multiplication with batch dimension support
+- Arbitrary dimension transpose
+
+**Neural Network Primitives**
+- Activation functions: ReLU, Sigmoid, Softmax (numerically stable)
+- Scalar operations and tensor scaling
+
+**Design Philosophy**
+- CPU-only, float32 operations
+- No autograd or GPU support
+- Minimal dependencies
+- Clear, readable implementation
+
+## Quick Start
+
+Build the library:
+
+```bash
+mkdir build && cd build
+cmake ..
+make
+```
+
+Run tests:
+
+```bash
+./tests/test_tensor
+./tests/test_ops
+```
+
 ## Project Structure
 
-- `CMakeLists.txt`:
-	- Defines how the project is built
-	- Sets C++ standard
-	- Builds the `torchlite` library
+```
+include/tl/     Public API headers
+src/            Implementation
+tests/          Test executables
+```
+## Requirements
 
-- `include/`:
-	- Holds public headers
-    - Defines the interface of the library
-    - What users of the library are allowed to include when using
+- C++17 or later
+- CMake 3.10+
 
-- `include/tl/`:
-	- Public API
-	- Declares all the modules
+## License
 
-- `include/tl/*.h`:
-    - Header files export interfaces
-    - Tells the compiler what exists, how it's used, and what the types/function signatures are
+MIT License
 
-- `src/`
-    - Holds the implementation of the library
-    - Actual code
-    - Not directly included by users
-- `tests`
-    - Holds the test exectuables for each component of the library
-
-## Tensor
-
-A minimal recreation of LibTorch float tensor for CPU only.
-Designed to:
-- Store n-dimensional data
-- Expose its shape and raw memory
-- Support basic math operations
-- Act as foundational for neural networks
-What it won't have:
-- autograd
-- GPU optimized and aware
-
-### Files
-
-`include/tl/tensor.h`
-`src/tensor.cpp`
-`CMakeLists.txt`
-`include/tl/ops.h`
-`src/ops.cpp`
-`tests/test_tensor`

@@ -2,7 +2,7 @@
 #include <tl/tensor.h>
 #include <cassert>
 
-int main() {
+void test_tensor() {
     // construct a 2 x 3 tensor
     tl::Tensor t1({2, 3});
 
@@ -30,7 +30,5 @@ int main() {
     assert(t3.strides()[1] == 4);
     assert(t3.strides()[2] == 1);
 
-    std::cout << "tests passed" << std::endl;
-
-    return 0;
+    std::cout << "tensor tests passed" << std::endl;
 }

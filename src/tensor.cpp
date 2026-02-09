@@ -57,14 +57,15 @@ static int64_t compute_numel(const std::vector<int64_t>& sizes) {
 
 // constructor to allocate contiguous storage based on sizes
 Tensor::Tensor(const std::vector<int64_t>& sizes)
-        : sizes_(sizes) // initialize private member to sizes
+        : sizes_(sizes), // initialize private member to sizes
+        offset_(0)
 {
     // use helper to get total numel
     const int64_t n = compute_numel(sizes_);
 
     // allocate or resize the contiguous buffer
     // vector<int64_t> owns the memory and keeps it contiguous
-    data_.resize(static_cast<size_t>(n)); // resize initializes to 0.0f (float)
+    data_ = std::make_shared<std::vector<float>>(static_cast<size_t>(n));
 
     // calcuate strides for dimension hopping (row-major)
     strides_.resize(sizes.size());
@@ -75,14 +76,27 @@ Tensor::Tensor(const std::vector<int64_t>& sizes)
     }
 }
 
+// create view of existing data
+Tensor::Tensor(std::shared_ptr<std::vector<float>> data,
+    const std::vector<int64_t>& sizes,
+    const std::vector<int64_t>& strides,
+    int64_t offset)
+  : data_(data),
+    sizes_(sizes),
+    strides_(strides),
+    offset_(offset)
+{
+
+}
+
 // mutable raw data access
 float* Tensor::data() {
-    return data_.data();
+    return data_->data() + offset_;
 }
 
 // inmutable raw data access
 const float* Tensor::data() const {
-    return data_.data();
+    return data_->data() + offset_;
 }
 
 // sizes accessor
@@ -92,12 +106,31 @@ const std::vector<int64_t>& Tensor::sizes() const {
 
 // number of elements (numel) accessor
 int64_t Tensor::numel() const {
-    return static_cast<int64_t>(data_.size());
+  return compute_numel(sizes_);
 }
 
 // strides accessor for higher dim tensors
 const std::vector<int64_t>& Tensor::strides() const{
   return strides_;
+}
+
+// offset into storage buffer
+int64_t Tensor::storage_offset() const {
+  return offset_;
+}
+
+// check if tensor is contiguous
+bool Tensor::is_contiguous() const {
+  if (sizes_.empty()) return true;
+  int64_t expected_stride = 1;
+  for (int i = static_cast<int>(sizes_.size()) - 1; i >= 0; --i) {
+    if (strides_[i] != expected_stride) {
+      return false;
+    }
+    expected_stride *= sizes_[i];
+  }
+
+  return true;
 }
 
 }

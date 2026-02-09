@@ -9,7 +9,7 @@ bool is_close(float a, float b, float e = 1e-5) {
   return std::abs( a - b ) < e;
 }
 
-int main() {
+void test_ops() {
   // test element wise addition
   tl::Tensor a({2, 2});
   tl::Tensor b({2, 2});
@@ -115,6 +115,5 @@ int main() {
   assert(is_close(scale_out.data()[1], 2.0f));
 
 
-  std::cout << "tests passed" << std::endl;
-  return 0;
+  std::cout << "ops tests passed" << std::endl;
 }
