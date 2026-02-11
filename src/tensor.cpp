@@ -25,10 +25,11 @@ namespace tl {
     }
     os << "], data=[";
 
-    for (int64_t i = 0; i < t.numel(); ++i) {
-      os << t.data()[i];
-      if (i + 1 < t.numel()) os << ", ";
+    Tensor c = t.contiguous();
+    for (int64_t i = 0; i < c.numel(); ++i) {
+      os << c.data()[i];
     }
+
     os << "])";
     return os;
   }
@@ -131,6 +132,27 @@ bool Tensor::is_contiguous() const {
   }
 
   return true;
+}
+
+Tensor Tensor::contiguous() const {
+  if (is_contiguous()) return *this;
+
+  Tensor out(sizes_);
+  const int64_t n = numel();
+  const int ndim = sizes_.size();
+
+  // walk through every element using stride aware indexing
+  for (int64_t i = 0; i < n; ++i) {
+    int64_t src_offset = 0;
+    int64_t tmp = i;
+    for (int d = ndim - 1; d >= 0; --d) {
+      int64_t coord = tmp % sizes_[d];
+      tmp /= sizes_[d];
+      src_offset += coord * strides_[d];
+    }
+    out.data()[i] = data()[src_offset];
+  }
+  return out;
 }
 
 }

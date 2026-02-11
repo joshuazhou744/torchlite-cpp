@@ -52,7 +52,7 @@ void test_ops() {
   // test transpose
   tl::Tensor transpose_in({2, 3});
   for (int i = 0; i < 6; ++i) transpose_in.data()[i] = (float) i;
-  tl::Tensor transpose_out = tl::transpose(transpose_in, 0, 1);
+  tl::Tensor transpose_out = tl::transpose(transpose_in, 0, 1).contiguous();
 
   assert(transpose_out.sizes()[0] == 3);
   assert(transpose_out.sizes()[1] == 2);

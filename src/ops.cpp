@@ -110,7 +110,9 @@ Tensor mul(const Tensor& a, const Tensor& b) {
 }
 
 // matrix multiplication
-Tensor matmul(const Tensor& a, const Tensor& b) {
+Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
+  Tensor a = a_in.contiguous();
+  Tensor b = b_in.contiguous();
   const auto& s_a = a.sizes();
   const auto& s_b = b.sizes();
 
@@ -173,38 +175,52 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
 
 // matrix transpose
 Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1) {
-  auto out_sizes = a.sizes();
-  std::swap(out_sizes[dim0], out_sizes[dim1]);
-  Tensor out(out_sizes);
-
-  const auto& a_sizes = a.sizes();
-
-  std::vector<int64_t> coords(a_sizes.size());
-
-  for (int64_t i = 0; i < a.numel(); ++i) {
-    // convert linear index to multi-dim coords
-    int64_t temp_index = i;
-    for (int d = a_sizes.size() - 1; d >= 0; --d) {
-      coords[d] = temp_index % a_sizes[d];
-      temp_index /= a_sizes[d];
-    }
-
-    // swap coordinates for the new tensor
-    std::swap(coords[dim0], coords[dim1]);
-
-    // calculate output linear index
-    int64_t out_index = 0;
-    const auto& out_strides = out.strides();
-    for (size_t d = 0; d < out_sizes.size(); ++d) {
-      out_index += coords[d] * out_strides[d];
-    }
-    out.data()[out_index] = a.data()[i];
+  int64_t ndim = a.sizes().size();
+  if (dim0 < 0 || dim0 >= ndim || dim1 < 0 || dim1 >= ndim) {
+    throw std::invalid_argument("Tranpose: dimension out of range");
   }
-  return out;
+  auto out_sizes = a.sizes();
+  auto out_strides = a.strides();
+
+  // simply swap the metadata
+  std::swap(out_sizes[dim0], out_sizes[dim1]);
+  std::swap(out_strides[dim0], out_strides[dim1]);
+
+  // use private constructor to create new view
+  return Tensor(a.data_, out_sizes, out_strides, a.offset_);
+}
+
+Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
+  // verify total elements match
+  int64_t new_numel = 1;
+  for (int64_t s: new_sizes) {
+    new_numel *= s;
+  }
+
+  if (new_numel != a.numel()) {
+    throw std::invalid_argument("Reshape: new shape must have same number of elements");
+  }
+
+  // only allow reshape on contiguous tensors
+  if (!a.is_contiguous()) {
+    throw std::invalid_argument("Reshape: tensor must be contiguous");
+  }
+
+  // compute new strides of new shape
+  std::vector<int64_t> new_strides(new_sizes.size());
+  int64_t stride = 1;
+  for (int i = static_cast<int>(new_sizes.size()) - 1; i >= 0; --i) {
+    new_strides[i] = stride;
+    stride *= new_sizes[i];
+  }
+
+  // create new view using private constructor
+  return Tensor(a.data_, new_sizes, new_strides, a.offset_);
 }
 
 // unary sigmoid
-Tensor sigmoid(const Tensor& a) {
+Tensor sigmoid(const Tensor& input) {
+  Tensor a = input.contiguous();
   Tensor out(a.sizes());
   const float* ap = a.data();
   float* op = out.data();
@@ -216,7 +232,8 @@ Tensor sigmoid(const Tensor& a) {
 }
 
 // unary relu
-Tensor relu(const Tensor& a) {
+Tensor relu(const Tensor& input) {
+  Tensor a = input.contiguous();
   Tensor out(a.sizes());
 
   const float* ap = a.data();
@@ -231,7 +248,8 @@ Tensor relu(const Tensor& a) {
 }
 
 // scale a tensor by a factor (scalar)
-Tensor scale(const Tensor& a, float scalar) {
+Tensor scale(const Tensor& input, float scalar) {
+  Tensor a = input.contiguous();
   Tensor out(a.sizes());
 
   const float* ap = a.data();
@@ -246,7 +264,8 @@ Tensor scale(const Tensor& a, float scalar) {
 }
 
 // softmax, squeeze everything between 0-1 (into probabilities) in the last dim
-Tensor softmax(const Tensor& a) {
+Tensor softmax(const Tensor& input) {
+  Tensor a = input.contiguous();
   const auto& sizes = a.sizes();
   if (sizes.empty()) {
     throw std::invalid_argument("Softmax requires at least 1D tensor");
