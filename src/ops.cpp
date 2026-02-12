@@ -162,11 +162,13 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
 
     for (int64_t m = 0; m < M; ++m) {
       for (int64_t n = 0; n < N; ++n) {
-        float sum = 0.0f;
-        for (int64_t k = 0; k < K; ++k) {
-          sum += ap[m * K + k] * bp[k * N + n];
+        op[m * N + n] = 0.0f;
+      }
+      for (int64_t k = 0; k < K; ++k) {
+        float a_val = ap[m * K + k];
+        for (int64_t n = 0; n < N; ++n) {
+          op[m * N + n] += a_val * bp[k * N + n];
         }
-        op[m * N + n] = sum;
       }
     }
   }
@@ -201,10 +203,8 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
     throw std::invalid_argument("Reshape: new shape must have same number of elements");
   }
 
-  // only allow reshape on contiguous tensors
-  if (!a.is_contiguous()) {
-    throw std::invalid_argument("Reshape: tensor must be contiguous");
-  }
+  // make sure tensor is contiguous
+  Tensor c = a.is_contiguous() ? a : a.contiguous();
 
   // compute new strides of new shape
   std::vector<int64_t> new_strides(new_sizes.size());
@@ -215,7 +215,7 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
   }
 
   // create new view using private constructor
-  return Tensor(a.data_, new_sizes, new_strides, a.offset_);
+  return Tensor(c.data_, new_sizes, new_strides, c.offset_);
 }
 
 // unary sigmoid
@@ -306,6 +306,57 @@ Tensor softmax(const Tensor& input) {
   }
 
   return out;
+}
+
+// sum along the dimension of a tensor
+Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
+  Tensor a = input.contiguous();
+  const auto& sizes = a.sizes();
+  int64_t ndim = sizes.size();
+
+  if (dim < 0 || dim >= ndim) {
+    throw std::invalid_argument("Sum: dimension out of range");
+  }
+
+  // build output shape
+  std::vector<int64_t> out_sizes;
+  for (int64_t i = 0; i < ndim; ++i) {
+    if (i == dim) {
+      if (keepdim) out_sizes.push_back(1);
+    } else {
+      out_sizes.push_back(sizes[i]);
+    }
+  }
+
+  Tensor out(out_sizes);
+  float* op = out.data();
+  const float* ap = a.data();
+
+  // outer = product of dims before dim
+  // D = size of dim being reduced
+  // inner = product of dims after dim
+  int64_t outer = 1, inner = 1;
+  int64_t D = sizes[dim];
+  for (int64_t i = 0; i < dim; ++i) outer *= sizes[i];
+  for (int64_t i = dim + 1; i < ndim; ++i) inner *= sizes[i];
+
+  for (int64_t o = 0; o < outer; ++o) {
+    for (int64_t n = 0; n < inner; ++n) {
+      float acc = 0.0f;
+      for (int64_t d = 0; d < D; ++d) {
+        acc += ap[o * D * inner + d * inner + n];
+      }
+      op[o * inner + n] = acc;
+    }
+  }
+
+  return out;
+}
+
+Tensor mean(const Tensor& input, int64_t dim, bool keepdim) {
+  Tensor s = sum(input, dim, keepdim);
+  int64_t D = input.sizes()[dim];
+  return scale(s, 1.0f / static_cast<float>(D));
 }
 
 }

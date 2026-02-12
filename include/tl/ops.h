@@ -34,4 +34,9 @@ Tensor scale(const Tensor& input, float scalar);
 // softmax along the last dimension of a tensor
 Tensor softmax(const Tensor& input);
 
+// tensor sum along dimension
+Tensor sum(const Tensor& input, int64_t dim, bool keepdim = false);
+
+// tensor mean along dimension
+Tensor mean(const Tensor& input, int64_t dim, bool keepdim = false);
 }

@@ -36,6 +36,7 @@ private:
 
     std::vector<int64_t> sizes_;
     std::vector<int64_t> strides_;
+    int64_t numel_;
     int64_t offset_;
 
     // grant access to ops that need to create views

@@ -62,11 +62,11 @@ Tensor::Tensor(const std::vector<int64_t>& sizes)
         offset_(0)
 {
     // use helper to get total numel
-    const int64_t n = compute_numel(sizes_);
+    numel_ = compute_numel(sizes_);
 
     // allocate or resize the contiguous buffer
     // vector<int64_t> owns the memory and keeps it contiguous
-    data_ = std::make_shared<std::vector<float>>(static_cast<size_t>(n));
+    data_ = std::make_shared<std::vector<float>>(static_cast<size_t>(numel_));
 
     // calcuate strides for dimension hopping (row-major)
     strides_.resize(sizes.size());
@@ -85,9 +85,9 @@ Tensor::Tensor(std::shared_ptr<std::vector<float>> data,
   : data_(data),
     sizes_(sizes),
     strides_(strides),
-    offset_(offset)
+    offset_(offset),
+    numel_(compute_numel(sizes))
 {
-
 }
 
 // mutable raw data access
@@ -107,7 +107,7 @@ const std::vector<int64_t>& Tensor::sizes() const {
 
 // number of elements (numel) accessor
 int64_t Tensor::numel() const {
-  return compute_numel(sizes_);
+  return numel_;
 }
 
 // strides accessor for higher dim tensors

@@ -115,5 +115,52 @@ void test_ops() {
   assert(is_close(scale_out.data()[1], 2.0f));
 
 
+  // test sum along dim 0: [[1,2,3],[4,5,6]] -> [5,7,9]
+  tl::Tensor sum_in({2, 3});
+  sum_in.data()[0] = 1.0f; sum_in.data()[1] = 2.0f; sum_in.data()[2] = 3.0f;
+  sum_in.data()[3] = 4.0f; sum_in.data()[4] = 5.0f; sum_in.data()[5] = 6.0f;
+
+  tl::Tensor sum_d0 = tl::sum(sum_in, 0);
+  assert(sum_d0.sizes().size() == 1);
+  assert(sum_d0.sizes()[0] == 3);
+  assert(is_close(sum_d0.data()[0], 5.0f));
+  assert(is_close(sum_d0.data()[1], 7.0f));
+  assert(is_close(sum_d0.data()[2], 9.0f));
+
+  // test sum along dim 1: [[1,2,3],[4,5,6]] -> [6,15]
+  tl::Tensor sum_d1 = tl::sum(sum_in, 1);
+  assert(sum_d1.sizes().size() == 1);
+  assert(sum_d1.sizes()[0] == 2);
+  assert(is_close(sum_d1.data()[0], 6.0f));
+  assert(is_close(sum_d1.data()[1], 15.0f));
+
+  // test sum keepdim: [[1,2,3],[4,5,6]] -> [[5,7,9]]
+  tl::Tensor sum_kd = tl::sum(sum_in, 0, true);
+  assert(sum_kd.sizes().size() == 2);
+  assert(sum_kd.sizes()[0] == 1);
+  assert(sum_kd.sizes()[1] == 3);
+  assert(is_close(sum_kd.data()[0], 5.0f));
+
+  // test mean along dim 1: [[1,2,3],[4,5,6]] -> [2,5]
+  tl::Tensor mean_d1 = tl::mean(sum_in, 1);
+  assert(mean_d1.sizes().size() == 1);
+  assert(mean_d1.sizes()[0] == 2);
+  assert(is_close(mean_d1.data()[0], 2.0f));
+  assert(is_close(mean_d1.data()[1], 5.0f));
+
+  // test sum on 3D: (2,3,2) along dim 1
+  tl::Tensor sum3d({2, 3, 2});
+  for (int i = 0; i < 12; ++i) sum3d.data()[i] = (float)i;
+  // [[[0,1],[2,3],[4,5]], [[6,7],[8,9],[10,11]]]
+  // sum along dim 1 -> [[6,9],[24,27]]
+  tl::Tensor sum3d_out = tl::sum(sum3d, 1);
+  assert(sum3d_out.sizes().size() == 2);
+  assert(sum3d_out.sizes()[0] == 2);
+  assert(sum3d_out.sizes()[1] == 2);
+  assert(is_close(sum3d_out.data()[0], 6.0f));
+  assert(is_close(sum3d_out.data()[1], 9.0f));
+  assert(is_close(sum3d_out.data()[2], 24.0f));
+  assert(is_close(sum3d_out.data()[3], 27.0f));
+
   std::cout << "ops tests passed" << std::endl;
 }
