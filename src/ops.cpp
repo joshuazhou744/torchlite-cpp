@@ -2,6 +2,7 @@
 #include <cstdint> // for int64_t
 #include <stdexcept>
 #include <algorithm> // for max()
+#include <cmath> // for sqrt() and exp()
 
 namespace tl {
 
@@ -79,6 +80,45 @@ Tensor add(const Tensor& a, const Tensor& b) {
 
     op[i] = ap[index_a] + bp[index_b];
   }
+  return out;
+}
+
+// element-wise subtraction
+Tensor sub(const Tensor& a, const Tensor& b) {
+  std::vector<int64_t> out_shape = compute_broadcast_shape(a.sizes(), b.sizes());
+  Tensor out(out_shape);
+
+  const auto& sizes_a = a.sizes();
+  const auto& strides_a = a.strides();
+  const auto& sizes_b = b.sizes();
+  const auto& strides_b = b.strides();
+
+  float* op = out.data();
+  const float* ap = a.data();
+  const float* bp = b.data();
+
+  const int64_t n = out.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    int64_t index_a = get_broadcast_index(i, sizes_a, strides_a, out_shape);
+    int64_t index_b = get_broadcast_index(i, sizes_b, strides_b, out_shape);
+    op[i] = ap[index_a] - bp[index_b];
+  }
+
+  return out;
+}
+
+// unary sqrt
+Tensor sqrt(const Tensor& input) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = std::sqrt(ap[i]);
+  }
+
   return out;
 }
 

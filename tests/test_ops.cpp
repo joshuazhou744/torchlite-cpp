@@ -162,5 +162,30 @@ void test_ops() {
   assert(is_close(sum3d_out.data()[2], 24.0f));
   assert(is_close(sum3d_out.data()[3], 27.0f));
 
+  // test sub with broadcasting: [[10,10,10],[10,10,10]] - [1,2,3]
+  tl::Tensor sub_mat({2, 3});
+  tl::Tensor sub_row({1, 3});
+  for (int i = 0; i < 6; ++i) sub_mat.data()[i] = 10.0f;
+  sub_row.data()[0] = 1.0f; sub_row.data()[1] = 2.0f; sub_row.data()[2] = 3.0f;
+
+  tl::Tensor sub_out = tl::sub(sub_mat, sub_row);
+  assert(is_close(sub_out.data()[0], 9.0f));
+  assert(is_close(sub_out.data()[1], 8.0f));
+  assert(is_close(sub_out.data()[2], 7.0f));
+  assert(is_close(sub_out.data()[3], 9.0f));
+
+  // test sqrt
+  tl::Tensor sqrt_in({4});
+  sqrt_in.data()[0] = 0.0f;
+  sqrt_in.data()[1] = 1.0f;
+  sqrt_in.data()[2] = 4.0f;
+  sqrt_in.data()[3] = 9.0f;
+
+  tl::Tensor sqrt_out = tl::sqrt(sqrt_in);
+  assert(is_close(sqrt_out.data()[0], 0.0f));
+  assert(is_close(sqrt_out.data()[1], 1.0f));
+  assert(is_close(sqrt_out.data()[2], 2.0f));
+  assert(is_close(sqrt_out.data()[3], 3.0f));
+
   std::cout << "ops tests passed" << std::endl;
 }

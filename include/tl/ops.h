@@ -1,7 +1,6 @@
 #pragma once
 
 #include <tl/tensor.h>
-#include <cmath> // for exp() in sigmoid activation function
 #include <cstdint>
 
 namespace tl {
@@ -9,8 +8,14 @@ namespace tl {
 // element-wise addition: out[i] = a[i] + b[i]
 Tensor add(const Tensor& a, const Tensor& b);
 
+// element-wise subtraction: out[i] = a[i] - b[i]
+Tensor sub(const Tensor& a, const Tensor& b);
+
 // element-wise multiplication: out[i] = a[i] * b[i]
 Tensor mul(const Tensor& a, const Tensor& b);
+
+// element-wise square root: out[i] = sqrt(in[i])
+Tensor sqrt(const Tensor& input);
 
 // matrix multiplication: out = a @ b
 // a: (N x M), b: (M x K), out: (N x K)
