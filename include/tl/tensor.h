@@ -16,7 +16,10 @@ public:
     // access raw data
     float* data();
     const float* data() const;
+    float& at(int64_t index);
+    const float& at(int64_t index) const;
     Tensor contiguous() const;
+    Tensor clone() const;
 
     // shape info
     const std::vector<int64_t>& sizes() const;

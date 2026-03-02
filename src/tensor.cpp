@@ -12,6 +12,7 @@
 #include <limits> // for std::numeric_limits
 #include <cstdint> // for int64_t
 #include <ostream>
+#include <algorithm> // for copy
 
 namespace tl {
 
@@ -27,6 +28,7 @@ namespace tl {
 
     Tensor c = t.contiguous();
     for (int64_t i = 0; i < c.numel(); ++i) {
+      if (i > 0) os << ", ";
       os << c.data()[i];
     }
 
@@ -100,6 +102,22 @@ const float* Tensor::data() const {
     return data_->data() + offset_;
 }
 
+// mutable access to a place in data
+float& Tensor::at(int64_t i) {
+  if (i < 0 || i >= numel_) {
+    throw std::out_of_range("Tensor::at index out of range");
+  }
+  return data()[i];
+}
+
+// immutable access to a place in data
+const float& Tensor::at(int64_t i) const {
+  if (i < 0 || i >= numel_) {
+    throw std::out_of_range("Tensor::at index out of range");
+  }
+  return data()[i];
+}
+
 // sizes accessor
 const std::vector<int64_t>& Tensor::sizes() const {
     return sizes_;
@@ -132,6 +150,13 @@ bool Tensor::is_contiguous() const {
   }
 
   return true;
+}
+
+Tensor Tensor::clone() const {
+  Tensor out(sizes_);
+  Tensor c = contiguous();
+  std::copy(c.data(), c.data() + numel_, out.data());
+  return out;
 }
 
 Tensor Tensor::contiguous() const {
