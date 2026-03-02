@@ -14,7 +14,7 @@ A lightweight C++ tensor library implementing core PyTorch-like operations for C
 - Activation functions: ReLU, Sigmoid, Softmax (numerically stable)
 - Scalar operations and tensor scaling
 
-**Design Philosophy**
+**Design**
 - CPU-only, float32 operations
 - No autograd or GPU support
 - Minimal dependencies
@@ -33,8 +33,7 @@ make
 Run tests:
 
 ```bash
-./tests/test_tensor
-./tests/test_ops
+./build/run_tests
 ```
 
 ## Project Structure
