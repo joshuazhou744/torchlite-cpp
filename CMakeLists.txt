@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(torchlite
     src/tensor.cpp
     src/ops.cpp
+    src/activation.cpp
+    src/factory.cpp
 )
 
 target_include_directories(torchlite
@@ -19,5 +21,7 @@ add_executable(run_tests
   tests/run_all_tests.cpp
   tests/test_tensor.cpp
   tests/test_ops.cpp
+  tests/test_activation.cpp
+  tests/test_factory.cpp
 )
 target_link_libraries(run_tests PRIVATE torchlite)

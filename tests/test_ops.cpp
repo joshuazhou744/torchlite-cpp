@@ -20,15 +20,6 @@ void test_ops() {
   assert(res_add.data()[0] == 4.0f);
   assert(res_add.data()[1] == 6.0f);
 
-  // test ReLU edge cases (0 and negative)
-  tl::Tensor c({1, 3});
-  c.data()[0] = -5.0f; c.data()[1] = 0.0f; c.data()[2] = 5.0f;
-
-  tl::Tensor res_relu = tl::relu(c);
-  assert(res_relu.data()[0] == 0.0f);
-  assert(res_relu.data()[1] == 0.0f);
-  assert(res_relu.data()[2] == 5.0f);
-
   // test matmul (indexing logic check)
   tl::Tensor A({2, 3}); // [[1, 2, 3], [4, 5, 6]]
   tl::Tensor B({3, 2}); // [[7, 8], [9, 10], [11, 12]]
@@ -41,13 +32,6 @@ void test_ops() {
   assert(res_matmul.data()[0] == 58.0f);
   // Row 1, Col 1: (4*8) + (5*10) + (6*12) = 154
   assert(res_matmul.data()[3] == 154.0f);
-
-  // test sigmoid
-  tl::Tensor d({1, 1});
-  d.data()[0] = 0.0f;
-  tl::Tensor res_sigmoid = tl::sigmoid(d);
-  // sigmoid(0) = 0.5
-  assert(is_close(res_sigmoid.data()[0], 0.5f));
 
   // test transpose
   tl::Tensor transpose_in({2, 3});
@@ -186,6 +170,65 @@ void test_ops() {
   assert(is_close(sqrt_out.data()[1], 1.0f));
   assert(is_close(sqrt_out.data()[2], 2.0f));
   assert(is_close(sqrt_out.data()[3], 3.0f));
+
+  // test div with broadcasting: [[10,20,30],[40,50,60]] / [2,5,10]
+  tl::Tensor div_mat({2, 3});
+  tl::Tensor div_row({1, 3});
+  div_mat.data()[0] = 10.0f; div_mat.data()[1] = 20.0f; div_mat.data()[2] = 30.0f;
+  div_mat.data()[3] = 40.0f; div_mat.data()[4] = 50.0f; div_mat.data()[5] = 60.0f;
+  div_row.data()[0] = 2.0f; div_row.data()[1] = 5.0f; div_row.data()[2] = 10.0f;
+
+  tl::Tensor div_out = tl::div(div_mat, div_row);
+  assert(is_close(div_out.data()[0], 5.0f));
+  assert(is_close(div_out.data()[1], 4.0f));
+  assert(is_close(div_out.data()[2], 3.0f));
+  assert(is_close(div_out.data()[3], 20.0f));
+
+  // test neg
+  tl::Tensor neg_in({3});
+  neg_in.data()[0] = 1.0f; neg_in.data()[1] = -2.0f; neg_in.data()[2] = 0.0f;
+
+  tl::Tensor neg_out = tl::neg(neg_in);
+  assert(neg_out.data()[0] == -1.0f);
+  assert(neg_out.data()[1] == 2.0f);
+  assert(neg_out.data()[2] == 0.0f);
+
+  // test exp: e^0 = 1, e^1 ~ 2.71828
+  tl::Tensor exp_in({2});
+  exp_in.data()[0] = 0.0f; exp_in.data()[1] = 1.0f;
+
+  tl::Tensor exp_out = tl::exp(exp_in);
+  assert(is_close(exp_out.data()[0], 1.0f));
+  assert(is_close(exp_out.data()[1], 2.71828f, 1e-4));
+
+  // test log: ln(1) = 0, ln(e) = 1
+  tl::Tensor log_in({2});
+  log_in.data()[0] = 1.0f; log_in.data()[1] = std::exp(1.0f);
+
+  tl::Tensor log_out = tl::log(log_in);
+  assert(is_close(log_out.data()[0], 0.0f));
+  assert(is_close(log_out.data()[1], 1.0f));
+
+  // test pow: 2^3 = 8, 9^0.5 = 3
+  tl::Tensor pow_in({2});
+  pow_in.data()[0] = 2.0f; pow_in.data()[1] = 9.0f;
+
+  tl::Tensor pow_out = tl::pow(pow_in, 3.0f);
+  assert(is_close(pow_out.data()[0], 8.0f));
+
+  tl::Tensor pow_sqrt = tl::pow(pow_in, 0.5f);
+  assert(is_close(pow_sqrt.data()[1], 3.0f));
+
+  // test clamp: clamp [-5, 0, 5, 10] to [0, 7]
+  tl::Tensor clamp_in({4});
+  clamp_in.data()[0] = -5.0f; clamp_in.data()[1] = 0.0f;
+  clamp_in.data()[2] = 5.0f; clamp_in.data()[3] = 10.0f;
+
+  tl::Tensor clamp_out = tl::clamp(clamp_in, 0.0f, 7.0f);
+  assert(clamp_out.data()[0] == 0.0f);
+  assert(clamp_out.data()[1] == 0.0f);
+  assert(clamp_out.data()[2] == 5.0f);
+  assert(clamp_out.data()[3] == 7.0f);
 
   std::cout << "ops tests passed" << std::endl;
 }
