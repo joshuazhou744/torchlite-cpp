@@ -149,16 +149,55 @@ Tensor mul(const Tensor& a, const Tensor& b) {
   return out;
 }
 
+Tensor div(const Tensor& a, const Tensor& b) {
+  // determine resulting shape
+  std::vector<int64_t> out_shape = compute_broadcast_shape(a.sizes(), b.sizes());
+  Tensor out(out_shape);
+
+  const auto& sizes_a = a.sizes();
+  const auto& strides_a = a.strides();
+  const auto& sizes_b = b.sizes();
+  const auto& strides_b = b.strides();
+
+  float* op = out.data();
+  const float* ap = a.data();
+  const float* bp = b.data();
+
+  // iterate through the outputs flat memory
+  const int64_t n = out.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    // map outputs linear index to physical index
+    int64_t index_a = get_broadcast_index(i, sizes_a, strides_a, out_shape);
+    int64_t index_b = get_broadcast_index(i, sizes_b, strides_b, out_shape);
+
+    op[i] = ap[index_a] / bp[index_b];
+  }
+  return out;
+}
+
 // matrix multiplication
 Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
   Tensor a = a_in.contiguous();
   Tensor b = b_in.contiguous();
+
+  // squeeze and track 1D matrices
+  bool squeeze_a = false, squeeze_b = false;
+  if (a.sizes().size() == 1) {
+    a = reshape(a, {1, a.sizes()[0]}); // [K] -> [1, K]
+    squeeze_a = true;
+  }
+  if (b.sizes().size() == 1) {
+    b = reshape(b, {b.sizes()[0], 1}); // [K] -> [K, 1]
+    squeeze_b = true;
+  }
+
+  // handle 0D tensors
+  if (a.sizes().size() < 2 || b.sizes().size() < 2) {
+    throw std::invalid_argument("matmul: requires at least 1D tensors");
+  }
+
   const auto& s_a = a.sizes();
   const auto& s_b = b.sizes();
-
-  if (s_a.size() < 2 || s_b.size() < 2) {
-    throw std::invalid_argument("matmul requires at least 2D tensors");
-  }
 
   // identify matrix dims
   int64_t M = s_a[s_a.size() - 2];
@@ -212,12 +251,28 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
       }
     }
   }
+  if (squeeze_a && squeeze_b) { // both squeezed
+    return reshape(out, {}); // [1, K] @ [K, 1] -> [1, 1] -> scalar
+  } else if (squeeze_a) { // only first input matrix squeezed
+    std::vector<int64_t> s(out.sizes().begin(), out.sizes().end());
+    s.erase(s.end() - 2); // [..., 1, N] @ [..., N] remove fake row dim
+    return reshape(out, s);
+  } else if (squeeze_b) { // only second input matrix squeezed
+    std::vector<int64_t> s(out.sizes().begin(), out.sizes().end());
+    s.erase(s.end() - 1); // [..., M, 1] @ [..., M], remove fake col dim
+    return reshape(out, s);
+  }
   return out;
 }
 
 // matrix transpose
 Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1) {
   int64_t ndim = a.sizes().size();
+
+  // negative dim wrapping
+  if (dim0 < 0) dim0 += ndim;
+  if (dim1 < 0) dim1 += ndim;
+
   if (dim0 < 0 || dim0 >= ndim || dim1 < 0 || dim1 >= ndim) {
     throw std::invalid_argument("Tranpose: dimension out of range");
   }
@@ -236,6 +291,9 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
   // verify total elements match
   int64_t new_numel = 1;
   for (int64_t s: new_sizes) {
+    if (s < 0) {
+      throw std::invalid_argument("Reshape: negative dims not allowed");
+    }
     new_numel *= s;
   }
 
@@ -256,35 +314,6 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
 
   // create new view using private constructor
   return Tensor(c.data_, new_sizes, new_strides, c.offset_);
-}
-
-// unary sigmoid
-Tensor sigmoid(const Tensor& input) {
-  Tensor a = input.contiguous();
-  Tensor out(a.sizes());
-  const float* ap = a.data();
-  float* op = out.data();
-
-  for (int64_t i = 0; i < a.numel(); ++i) {
-    op[i] = 1.0f / (1.0f + std::exp(-ap[i]));
-  }
-  return out;
-}
-
-// unary relu
-Tensor relu(const Tensor& input) {
-  Tensor a = input.contiguous();
-  Tensor out(a.sizes());
-
-  const float* ap = a.data();
-  float* op = out.data();
-
-  const int64_t n = a.numel();
-  for (int64_t i = 0; i < n; ++i) {
-      op[i] = std::max(0.0f, ap[i]);
-  }
-
-  return out;
 }
 
 // scale a tensor by a factor (scalar)
@@ -309,6 +338,10 @@ Tensor softmax(const Tensor& input) {
   const auto& sizes = a.sizes();
   if (sizes.empty()) {
     throw std::invalid_argument("Softmax requires at least 1D tensor");
+  }
+
+  if (sizes.back() == 0) {
+    return Tensor(sizes); // no last dim to normalize
   }
 
   Tensor out(sizes);
@@ -354,6 +387,8 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
   const auto& sizes = a.sizes();
   int64_t ndim = sizes.size();
 
+  if (dim < 0) dim += ndim; // negative dim wrapping
+
   if (dim < 0 || dim >= ndim) {
     throw std::invalid_argument("Sum: dimension out of range");
   }
@@ -394,9 +429,82 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
 }
 
 Tensor mean(const Tensor& input, int64_t dim, bool keepdim) {
+  // negative dim wrapping
+  int64_t ndim = input.sizes().size();
+  if (dim < 0) dim += ndim;
+
   Tensor s = sum(input, dim, keepdim);
   int64_t D = input.sizes()[dim];
+  if (D == 0) {
+    throw std::invalid_argument("Mean: cannot reduce a zero-sized dimension");
+  }
+
   return scale(s, 1.0f / static_cast<float>(D));
+}
+
+Tensor neg(const Tensor& input) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = -ap[i];
+  }
+  return out;
+}
+
+Tensor exp(const Tensor& input) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = std::exp(ap[i]);
+  }
+  return out;
+}
+
+Tensor pow(const Tensor& input, float x) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = std::pow(ap[i], x);
+  }
+  return out;
+}
+
+Tensor log(const Tensor& input) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = std::log(ap[i]);
+  }
+  return out;
+}
+
+Tensor clamp(const Tensor& input, float min_val, float max_val) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = std::max(min_val, std::min(max_val, ap[i]));
+  }
+  return out;
 }
 
 }
