@@ -316,6 +316,134 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
   return Tensor(c.data_, new_sizes, new_strides, c.offset_);
 }
 
+// tensor concatenation along existing dimension
+Tensor cat(const std::vector<Tensor>& tensors, int64_t dim) {
+  if (tensors.empty()) {
+    throw std::invalid_argument("cat: empty tensor list");
+  }
+
+  int64_t ndim = tensors[0].sizes().size();
+  if (dim < 0) dim += ndim;
+  if (dim < 0 || dim >= ndim) {
+    throw std::invalid_argument("cat: dimension out of range");
+  }
+
+  // validate shapes match except along given dim
+  for (size_t t = 1; t < tensors.size(); ++t) {
+    if ((int64_t)tensors[t].sizes().size() != ndim) {
+      throw std::invalid_argument("cat: all tensors must have same number of dimensions");
+    }
+
+    for (int64_t d = 0; d < ndim; ++d) {
+      if (d != dim && tensors[t].sizes()[d] != tensors[0].sizes()[d]) {
+        throw std::invalid_argument("cat: shapes must match except in cat dimension");
+      }
+    }
+  }
+
+  // compute output shape
+  std::vector<int64_t> out_sizes(tensors[0].sizes().begin(), tensors[0].sizes().end());
+  int64_t total_cat_size = 0;
+  for (const auto& t: tensors) {
+    total_cat_size += t.sizes()[dim];
+  }
+  out_sizes[dim] = total_cat_size;
+
+  Tensor out(out_sizes);
+  float* op = out.data();
+
+  // outer = product of dimensions before dim
+  // inner = product of dimensions after dim
+  int64_t outer = 1, inner = 1;
+  for (int64_t i = 0; i < dim; ++i) outer *= out_sizes[i];
+  for (int64_t i = dim+1; i < ndim; ++i) inner *= out_sizes[i];
+
+  int64_t cat_offset = 0;
+  for (const auto& t: tensors) {
+    Tensor tc = t.contiguous();
+    const float* tp = tc.data();
+    int64_t t_dim_size = tc.sizes()[dim];
+
+    for (int64_t o = 0; o < outer; ++o) {
+      for (int64_t d = 0; d < t_dim_size; ++d) {
+        for (int64_t n = 0; n < inner; ++n) {
+          op[o * total_cat_size * inner + (cat_offset + d) * inner + n] = tp[o * t_dim_size * inner + d * inner + n];
+        }
+      }
+    }
+    cat_offset += t_dim_size;
+  }
+  return out;
+}
+
+// tensor stacking along a new dimension
+Tensor stack(const std::vector<Tensor>& tensors, int64_t dim) {
+  if (tensors.empty()) {
+    throw std::invalid_argument("stack: empty tensor list");
+  }
+
+  int64_t ndim = tensors[0].sizes().size();
+  if (dim < 0) dim += ndim + 1;
+  if (dim < 0 || dim > ndim) {
+    throw std::invalid_argument("stack: dimension out of range");
+  }
+
+  // validate all tensors have the same shape
+  for (size_t t = 1; t < tensors.size(); ++t) {
+    if (tensors[t].sizes() != tensors[0].sizes()) {
+      throw std::invalid_argument("stack: all tensors must have same shape");
+    }
+  }
+
+  // unsqueeze each tensor at given dimension, then concatenate
+  std::vector<Tensor> unsqueezed;
+  for (const auto& t: tensors) {
+    std::vector<int64_t> new_sizes(t.sizes().begin(), t.sizes().end());
+    new_sizes.insert(new_sizes.begin() + dim, 1);
+    unsqueezed.push_back(reshape(t, new_sizes));
+  }
+
+  return cat(unsqueezed, dim);
+}
+
+// tensor slicing along a given dimension
+Tensor slice(const Tensor& input, int64_t dim, int64_t start, int64_t end) {
+  Tensor a = input.contiguous();
+  const auto& sizes = a.sizes();
+  int64_t ndim = sizes.size();
+
+  if (dim < 0) dim += ndim;
+  if (dim < 0 || dim >= ndim) {
+    throw std::invalid_argument("slice: dimension out of range");
+  }
+  if (start < 0 || end > sizes[dim] || start >= end) {
+    throw std::invalid_argument("slice: invalid start/end range");
+  }
+
+  // build output shape
+  std::vector<int64_t> out_sizes(sizes.begin(), sizes.end());
+  out_sizes[dim] = end - start;
+
+  Tensor out(out_sizes);
+  float* op = out.data();
+  const float* ap = a.data();
+
+  int64_t outer = 1, inner = 1;
+  int64_t D = sizes[dim];
+  int64_t slice_size = end - start;
+  for (int64_t i = 0; i < dim; ++i) outer *= sizes[i];
+  for (int64_t i = dim+1; i < ndim; ++i) inner *= sizes[i];
+
+  for (int64_t o = 0; o < outer; ++o) {
+    for (int64_t d = 0; d < slice_size; ++d) {
+      for (int64_t n = 0; n < inner; ++n) {
+        op[o * slice_size * inner + d * inner + n] = ap[o * D * inner + (start + d) * inner + n];
+      }
+    }
+  }
+  return out;
+}
+
 // scale a tensor by a factor (scalar)
 Tensor scale(const Tensor& input, float scalar) {
   Tensor a = input.contiguous();
@@ -428,6 +556,7 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
   return out;
 }
 
+// calculate mean of a dimension
 Tensor mean(const Tensor& input, int64_t dim, bool keepdim) {
   // negative dim wrapping
   int64_t ndim = input.sizes().size();
@@ -440,6 +569,19 @@ Tensor mean(const Tensor& input, int64_t dim, bool keepdim) {
   }
 
   return scale(s, 1.0f / static_cast<float>(D));
+}
+
+// calculate the variance of a dimension
+// var = mean((x - mean)^2)
+Tensor variance(const Tensor& input, int64_t dim, bool keepdim) {
+  int64_t ndim = input.sizes().size();
+  if (dim < 0) dim += ndim; // dim wrapping
+
+  Tensor m = mean(input, dim, true);
+  Tensor diff = sub(input, m);
+  Tensor sq = mul(diff, diff);
+  Tensor var = mean(sq, dim, keepdim);
+  return var;
 }
 
 Tensor neg(const Tensor& input) {

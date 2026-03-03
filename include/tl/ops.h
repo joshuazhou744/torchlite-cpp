@@ -27,8 +27,17 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in);
 // matrix transpose
 Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1);
 
-// matrix reshape
+// tensor reshape
 Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes);
+
+// tensor concatenation along existing dimension
+Tensor cat(const std::vector<Tensor>& tensors, int64_t dim);
+
+// tensor stacking along a new dimension
+Tensor stack(const std::vector<Tensor>& tensors, int64_t dim = 0);
+
+// tensor slicing along a given dimension
+Tensor slice(const Tensor& input, int64_t dim, int64_t start, int64_t end);
 
 // scale tensor by a scalar: out = a * scalar
 Tensor scale(const Tensor& input, float scalar);
@@ -41,6 +50,9 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim = false);
 
 // tensor mean along dimension
 Tensor mean(const Tensor& input, int64_t dim, bool keepdim = false);
+
+// tensor variance along dimension
+Tensor variance(const Tensor& input, int64_t dim, bool keepdim = false);
 
 // unary negation: out[i] = -in[i]
 Tensor neg(const Tensor& input);

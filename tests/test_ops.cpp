@@ -230,5 +230,68 @@ void test_ops() {
   assert(clamp_out.data()[2] == 5.0f);
   assert(clamp_out.data()[3] == 7.0f);
 
+  // test variance: [[1,2,3],[4,5,6]] along dim 1
+  // row 0: mean=2, var=((1-2)^2 + (2-2)^2 + (3-2)^2) / 3 = 2/3
+  // row 1: mean=5, var=((4-5)^2 + (5-5)^2 + (6-5)^2) / 3 = 2/3
+  tl::Tensor var_in({2, 3});
+  var_in.data()[0] = 1.0f; var_in.data()[1] = 2.0f; var_in.data()[2] = 3.0f;
+  var_in.data()[3] = 4.0f; var_in.data()[4] = 5.0f; var_in.data()[5] = 6.0f;
+
+  tl::Tensor var_out = tl::variance(var_in, 1);
+  assert(var_out.sizes().size() == 1);
+  assert(var_out.sizes()[0] == 2);
+  assert(is_close(var_out.data()[0], 2.0f / 3.0f));
+  assert(is_close(var_out.data()[1], 2.0f / 3.0f));
+
+  // test cat: join [[1,2],[3,4]] and [[5,6],[7,8]] along dim 0
+  tl::Tensor cat_a({2, 2});
+  tl::Tensor cat_b({2, 2});
+  cat_a.data()[0] = 1.0f; cat_a.data()[1] = 2.0f;
+  cat_a.data()[2] = 3.0f; cat_a.data()[3] = 4.0f;
+  cat_b.data()[0] = 5.0f; cat_b.data()[1] = 6.0f;
+  cat_b.data()[2] = 7.0f; cat_b.data()[3] = 8.0f;
+
+  tl::Tensor cat_out = tl::cat({cat_a, cat_b}, 0);
+  assert(cat_out.sizes()[0] == 4);
+  assert(cat_out.sizes()[1] == 2);
+  assert(cat_out.data()[0] == 1.0f);
+  assert(cat_out.data()[3] == 4.0f);
+  assert(cat_out.data()[4] == 5.0f);
+  assert(cat_out.data()[7] == 8.0f);
+
+  // test cat along dim 1
+  tl::Tensor cat_d1 = tl::cat({cat_a, cat_b}, 1);
+  assert(cat_d1.sizes()[0] == 2);
+  assert(cat_d1.sizes()[1] == 4);
+  assert(cat_d1.data()[0] == 1.0f);
+  assert(cat_d1.data()[1] == 2.0f);
+  assert(cat_d1.data()[2] == 5.0f);
+  assert(cat_d1.data()[3] == 6.0f);
+
+  // test stack: two [3] tensors at dim 0 -> [2, 3]
+  tl::Tensor stack_a({3});
+  tl::Tensor stack_b({3});
+  stack_a.data()[0] = 1.0f; stack_a.data()[1] = 2.0f; stack_a.data()[2] = 3.0f;
+  stack_b.data()[0] = 4.0f; stack_b.data()[1] = 5.0f; stack_b.data()[2] = 6.0f;
+
+  tl::Tensor stack_out = tl::stack({stack_a, stack_b}, 0);
+  assert(stack_out.sizes().size() == 2);
+  assert(stack_out.sizes()[0] == 2);
+  assert(stack_out.sizes()[1] == 3);
+  assert(stack_out.data()[0] == 1.0f);
+  assert(stack_out.data()[3] == 4.0f);
+
+  // test slice: [[1,2,3,4],[5,6,7,8]] slice dim 1 from 1 to 3
+  tl::Tensor slice_in({2, 4});
+  for (int i = 0; i < 8; ++i) slice_in.data()[i] = (float)(i + 1);
+
+  tl::Tensor slice_out = tl::slice(slice_in, 1, 1, 3);
+  assert(slice_out.sizes()[0] == 2);
+  assert(slice_out.sizes()[1] == 2);
+  assert(slice_out.data()[0] == 2.0f);
+  assert(slice_out.data()[1] == 3.0f);
+  assert(slice_out.data()[2] == 6.0f);
+  assert(slice_out.data()[3] == 7.0f);
+
   std::cout << "ops tests passed" << std::endl;
 }
