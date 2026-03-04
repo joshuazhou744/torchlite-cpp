@@ -58,5 +58,20 @@ private:
   Linear out_proj_; // output projection
 };
 
+// TransformerEncoderLayer: MSA and FFN with residual connections and layer normalization
+class TransformerEncoderLayer {
+public:
+  TransformerEncoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p = 0.1f);
+  Tensor forward(const Tensor& input) const;
+
+private:
+  MultiHeadAttention msa_;
+  LayerNorm norm1_;
+  LayerNorm norm2_;
+  Linear ff1_;
+  Linear ff2_;
+  Dropout dropout_; // not needed in this inference only framework, here for convention
+};
+
 } // nn
 } // tl

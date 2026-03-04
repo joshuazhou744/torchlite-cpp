@@ -1,6 +1,7 @@
 #include <tl/nn.h>
 #include <tl/ops.h>
 #include <tl/factory.h>
+#include <tl/activation.h>
 
 #include <random>
 #include <cmath>
@@ -118,6 +119,30 @@ Tensor MultiHeadAttention::forward(const Tensor& input) const {
   // final output projection layer: [batch, seq, d_model] (same shape as input)
   return out_proj_.forward(out);
 }
+
+// Transformer encoder layer
+TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
+  : msa_(d_model, num_heads),
+    norm1_(d_model),
+    norm2_(d_model),
+    ff1_(d_model, d_ff),
+    ff2_(d_ff, d_model),
+    dropout_(dropout_p)
+{}
+Tensor TransformerEncoderLayer::forward(const Tensor& input) const {
+  // self-attention block with residuals
+  Tensor attn_out = msa_.forward(input);
+  attn_out = dropout_.forward(attn_out, false); // inert dropout
+  Tensor x = norm1_.forward(add(input, attn_out)); // add residual (input)
+
+  // feed-forward block with residuals
+  Tensor ff_out = ff1_.forward(x);
+  ff_out = gelu(ff_out);
+  ff_out = ff2_.forward(ff_out);
+  ff_out = dropout_.forward(ff_out, false); // inert dropout
+  return norm2_.forward(add(x, ff_out)); // add residual to output
+}
+
 
 }
 }
