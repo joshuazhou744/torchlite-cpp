@@ -31,5 +31,15 @@ private:
   float eps_; // tiny epsilon to avoid division by 0
 };
 
+// Dropout: turn random elements to zero during training
+class Dropout {
+public:
+  Dropout(float p = 0.1f);
+  Tensor forward(const Tensor& input, bool training = true) const;
+
+private:
+  float p_; // zeroing probability (dropout rate)
+};
+
 } // nn
 } // tl
