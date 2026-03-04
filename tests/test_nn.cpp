@@ -110,5 +110,36 @@ void test_nn() {
     assert(std::isfinite(te_out.data()[i]));
   }
 
+  // test PositionalEncoding: shape preserved
+  tl::nn::PositionalEncoding pe(16);
+  tl::Tensor pe_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]
+  tl::Tensor pe_out = pe.forward(pe_in);
+  assert(pe_out.sizes().size() == 3);
+  assert(pe_out.sizes()[0] == 2);
+  assert(pe_out.sizes()[1] == 5);
+  assert(pe_out.sizes()[2] == 16);
+
+  // test output differs from input (encoding was added)
+  bool any_diff = false;
+  for (int i = 0; i < pe_in.numel(); ++i) {
+    if (!is_close_nn(pe_in.data()[i], pe_out.data()[i])) {
+      any_diff = true;
+      break;
+    }
+  }
+  assert(any_diff);
+
+  // test same position gets same encoding regardless of input content
+  tl::Tensor pe_in2 = tl::randn({1, 5, 16}); // different content, same seq length
+  tl::Tensor pe_out2 = pe.forward(pe_in2);
+  tl::Tensor pe_zeros = tl::zeros({1, 5, 16});
+  tl::Tensor pe_out3 = pe.forward(pe_zeros);
+  // pe_out3 should equal pure positional encoding since input was zeros
+  // pe_out2 - pe_in2 should equal pe_out3 - zeros = pe_out3
+  for (int i = 0; i < pe_out3.numel(); ++i) {
+    float added_to_in2 = pe_out2.data()[i] - pe_in2.data()[i];
+    assert(is_close_nn(added_to_in2, pe_out3.data()[i]));
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }
