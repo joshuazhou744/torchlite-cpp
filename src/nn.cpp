@@ -157,5 +157,27 @@ Tensor TransformerEncoder::forward(const Tensor& input) const {
   return x;
 }
 
+// Position encoding
+PositionalEncoding::PositionalEncoding(int64_t d_model, int64_t max_len)
+  : pe_({max_len, d_model})
+{
+  float* p = pe_.data();
+  for (int64_t pos = 0; pos < max_len; ++pos) {
+    for (int64_t i = 0; i < d_model; i += 2) {
+      float angle = pos / std::pow(10000.0f, static_cast<float>(i) / d_model);
+      p[pos * d_model + i] = std::sin(angle);
+      if (i + 1 < d_model) {
+        p[pos * d_model + i + 1] = std::cos(angle);
+      }
+    }
+  }
+}
+Tensor PositionalEncoding::forward(const Tensor& input) const {
+  // input: [batch, seq, d_model]
+  int64_t seq = input.sizes()[1];
+  Tensor pe_slice = slice(pe_, 0, 0, seq); //grab first seq
+  return add(input, pe_slice); // broadcast add accross batch
+}
+
 }
 }

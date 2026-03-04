@@ -100,5 +100,15 @@ private:
   std::vector<TransformerEncoderLayer> layers_;
 };
 
+// PositionalEncoding: add sinusoidal position information to input tensors
+class PositionalEncoding {
+public:
+  PositionalEncoding(int64_t d_model, int64_t max_len = 5000);
+  Tensor forward(const Tensor& input) const;
+
+private:
+  Tensor pe_; // precomputed positional encoding table with shape: [max_len, d_model]
+};
+
 } // nn
 } // tl
