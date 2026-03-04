@@ -1,7 +1,10 @@
 #include <tl/factory.h>
+
 #include <cstdint> // int64_t
 #include <random> // randn
 #include <stdexcept>
+#include <fstream>
+#include <string>
 
 namespace tl {
 
@@ -50,6 +53,17 @@ Tensor arange(int start, int end) {
   for (int64_t i = 0; i < size; ++i) {
     op[i] = static_cast<float>(start + i);
   }
+  return out;
+}
+
+// load PyTorch tensors
+Tensor load(const std::string& path, const std::vector<int64_t>& sizes) {
+  Tensor out(sizes);
+  std::ifstream file(path, std::ios::binary);
+  if (!file.is_open()) {
+    throw std::invalid_argument("load: cannot open file " + path);
+  }
+  file.read(reinterpret_cast<char*>(out.data()), out.numel() * sizeof(float));
   return out;
 }
 
