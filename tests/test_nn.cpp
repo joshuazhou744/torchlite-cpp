@@ -82,5 +82,19 @@ void test_nn() {
     assert(std::isfinite(msa_out.data()[i]));
   }
 
+  // test TransformerEncoderLayer: shape preserved
+  tl::nn::TransformerEncoderLayer enc_layer(16, 4, 64); // d_model=16, 4 heads, d_ff=64
+  tl::Tensor enc_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]
+  tl::Tensor enc_out = enc_layer.forward(enc_in);
+  assert(enc_out.sizes().size() == 3);
+  assert(enc_out.sizes()[0] == 2);
+  assert(enc_out.sizes()[1] == 5);
+  assert(enc_out.sizes()[2] == 16);
+
+  // test output values are finite
+  for (int i = 0; i < enc_out.numel(); ++i) {
+    assert(std::isfinite(enc_out.data()[i]));
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }
