@@ -41,5 +41,22 @@ private:
   float p_; // zeroing probability (dropout rate)
 };
 
+// MultiHeadAttention: split input into parallel attention heads
+class MultiHeadAttention {
+public:
+  MultiHeadAttention(int64_t d_model, int64_t num_heads);
+  Tensor forward(const Tensor& input) const;
+
+private:
+  int64_t d_model_; // embedding dimension, hidden dim of output tensor, attention is all you need paper uses d_model, hidden_dim makes more sense to me though
+  int64_t num_heads_; // number of attention heads
+  int64_t head_dim_; // dimensions per head, d_model / num_heads
+
+  Linear q_proj_; // query projection
+  Linear k_proj_; // key projection
+  Linear v_proj_; // value projection
+  Linear out_proj_; // output projection
+};
+
 } // nn
 } // tl

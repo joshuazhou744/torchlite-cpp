@@ -60,5 +60,27 @@ void test_nn() {
   row0_var /= 4.0f;
   assert(is_close_nn(row0_var, 1.0f, 1e-4));
 
+  // test MultiHeadAttention: shape check
+  tl::nn::MultiHeadAttention msa(16, 4); // d_model=16, 4 heads of dim 4
+  tl::Tensor msa_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]
+  tl::Tensor msa_out = msa.forward(msa_in);
+  assert(msa_out.sizes().size() == 3);
+  assert(msa_out.sizes()[0] == 2);  // batch preserved
+  assert(msa_out.sizes()[1] == 5);  // seq preserved
+  assert(msa_out.sizes()[2] == 16); // d_model preserved
+
+  // test MSA with different config
+  tl::nn::MultiHeadAttention msa2(32, 8); // d_model=32, 8 heads of dim 4
+  tl::Tensor msa2_in = tl::randn({1, 10, 32});
+  tl::Tensor msa2_out = msa2.forward(msa2_in);
+  assert(msa2_out.sizes()[0] == 1);
+  assert(msa2_out.sizes()[1] == 10);
+  assert(msa2_out.sizes()[2] == 32);
+
+  // test MSA output values are finite
+  for (int i = 0; i < msa_out.numel(); ++i) {
+    assert(std::isfinite(msa_out.data()[i]));
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }
