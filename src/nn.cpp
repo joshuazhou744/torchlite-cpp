@@ -2,6 +2,8 @@
 #include <tl/ops.h>
 #include <tl/factory.h>
 
+#include <random>
+
 namespace tl {
 namespace nn {
 
@@ -40,10 +42,28 @@ Tensor LayerNorm::forward(const Tensor& input) const {
   return add(mul(normed, gamma_), beta_);
 }
 
-// Dropout layer: not needed really for my purposes, will keep here just in case
+// Dropout layer
+// not needed because we are using torchlite for inference only, will keep here just in case
 Dropout::Dropout(float p) : p_(p) {}
 Tensor Dropout::forward(const Tensor& input, bool training) const {
-  return input.contiguous();
+  Tensor a = input.contiguous();
+  if (!training || p_ == 0.0f) {
+    return a;
+  }
+
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  std::mt19937 gen(std::random_device{}());
+  std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+  float scale = 1.0f / (1.0f - p_);
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = (dist(gen) < p_) ? 0.0f : ap[i] * scale;
+  }
+  return out;
 }
 
 }
