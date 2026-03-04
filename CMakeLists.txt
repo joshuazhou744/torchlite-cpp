@@ -10,6 +10,7 @@ add_library(torchlite
     src/ops.cpp
     src/activation.cpp
     src/factory.cpp
+    src/nn.cpp
 )
 
 target_include_directories(torchlite
@@ -23,5 +24,6 @@ add_executable(run_tests
   tests/test_ops.cpp
   tests/test_activation.cpp
   tests/test_factory.cpp
+  tests/test_nn.cpp
 )
 target_link_libraries(run_tests PRIVATE torchlite)

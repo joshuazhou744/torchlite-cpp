@@ -4,6 +4,7 @@ void test_tensor();
 void test_ops();
 void test_activation();
 void test_factory();
+void test_nn();
 
 int main() {
   std::cout << "Running all tests... \n" << std::endl;
@@ -12,6 +13,7 @@ int main() {
   test_ops();
   test_activation();
   test_factory();
+  test_nn();
 
   return 0;
 }
