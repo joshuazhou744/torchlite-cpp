@@ -143,6 +143,19 @@ Tensor TransformerEncoderLayer::forward(const Tensor& input) const {
   return norm2_.forward(add(x, ff_out)); // add residual to output
 }
 
+// Transformer encoder
+TransformerEncoder::TransformerEncoder(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p) {
+  for (int64_t i = 0; i < num_layers; ++i) {
+    layers_.emplace_back(d_model, num_heads, d_ff, dropout_p);
+  }
+}
+Tensor TransformerEncoder::forward(const Tensor& input) const {
+  Tensor x = input;
+  for (const auto& layer: layers_) {
+    x = layer.forward(x);
+  }
+  return x;
+}
 
 }
 }

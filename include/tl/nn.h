@@ -73,5 +73,15 @@ private:
   Dropout dropout_; // not needed in this inference only framework, here for convention
 };
 
+// TransformerEncoder: stack of N encoder layers
+class TransformerEncoder {
+public:
+  TransformerEncoder(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p = 0.1f);
+  Tensor forward(const Tensor& input) const;
+
+private:
+  std::vector<TransformerEncoderLayer> layers_;
+};
+
 } // nn
 } // tl
