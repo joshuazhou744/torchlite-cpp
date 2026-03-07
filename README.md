@@ -6,19 +6,21 @@ A lightweight C++ tensor library implementing core PyTorch-like operations for C
 
 **Tensor Operations**
 - N-dimensional tensor data structure with automatic stride calculation
-- Element-wise operations (add, multiply) with NumPy-style broadcasting
+- Element-wise operations (add, sub, mul, div, neg, exp, log, pow, clamp) with NumPy-style broadcasting
 - Matrix multiplication with batch dimension support
-- Arbitrary dimension transpose
+- Reductions: sum, mean, variance, argmax, softmax
+- Reshape, transpose, cat, stack, slice, pad
 
-**Neural Network Primitives**
-- Activation functions: ReLU, Sigmoid, Softmax (numerically stable)
-- Scalar operations and tensor scaling
+**Neural Network Modules**
+- Linear, LayerNorm, Dropout
+- MultiHeadAttention, TransformerEncoderLayer, TransformerEncoder
+- PositionalEncoding
+- Activation functions: ReLU, GELU, Sigmoid
 
 **Design**
+- Inference-only (no autograd)
 - CPU-only, float32 operations
-- No autograd or GPU support
-- Minimal dependencies
-- Clear, readable implementation
+- Weight loading from raw binary files
 
 ## Quick Start
 
@@ -39,14 +41,21 @@ Run tests:
 ## Project Structure
 
 ```
-include/tl/     Public API headers
-src/            Implementation
-tests/          Test executables
+include/tl/         Public API headers (tensor, ops, nn, activation, factory)
+include/external/   Third-party headers (LibrosaCpp)
+src/                Implementation
+tests/              Test executables
 ```
+## Dependencies
+
+- [Eigen3](https://eigen.tuxfamily.org/) — required by LibrosaCpp for audio preprocessing
+- [LibrosaCpp](https://github.com/ewan-xu/LibrosaCpp) — single-header mel spectrogram computation (included in `include/external/`)
+
 ## Requirements
 
 - C++17 or later
 - CMake 3.10+
+- Eigen3 (`sudo apt install libeigen3-dev`)
 
 ## License
 
