@@ -58,7 +58,11 @@ static int64_t compute_numel(const std::vector<int64_t>& sizes) {
     return n;
 }
 
-// constructor to allocate contiguous storage based on sizes
+// default tensor constructor
+Tensor::Tensor() : data_(nullptr), numel_(0), offset_(0) {}
+
+// public constructor: allocate contiguous storage based on sizes
+// create a new tensor with fresh memory and compute strides, called by developer
 Tensor::Tensor(const std::vector<int64_t>& sizes)
         : sizes_(sizes), // initialize private member to sizes
         offset_(0)
@@ -79,7 +83,8 @@ Tensor::Tensor(const std::vector<int64_t>& sizes)
     }
 }
 
-// create view of existing data
+// private constructor: create view of existing data
+// wrap existing memory with new shape/strides, create views without copying data
 Tensor::Tensor(std::shared_ptr<std::vector<float>> data,
     const std::vector<int64_t>& sizes,
     const std::vector<int64_t>& strides,
@@ -89,8 +94,7 @@ Tensor::Tensor(std::shared_ptr<std::vector<float>> data,
     strides_(strides),
     offset_(offset),
     numel_(compute_numel(sizes))
-{
-}
+{}
 
 // mutable raw data access
 float* Tensor::data() {
@@ -157,6 +161,10 @@ Tensor Tensor::clone() const {
   Tensor c = contiguous();
   std::copy(c.data(), c.data() + numel_, out.data());
   return out;
+}
+
+bool Tensor::empty() const {
+  return numel_ == 0;
 }
 
 Tensor Tensor::contiguous() const {

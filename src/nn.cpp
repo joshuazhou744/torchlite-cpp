@@ -5,6 +5,7 @@
 
 #include <random>
 #include <cmath>
+#include <stdexcept>
 
 namespace tl {
 namespace nn {
@@ -77,9 +78,13 @@ MultiHeadAttention::MultiHeadAttention(int64_t d_model, int64_t num_heads)
     k_proj_(d_model, d_model),
     v_proj_(d_model, d_model),
     out_proj_(d_model, d_model)
-{}
+{
+  if (d_model % num_heads != 0) {
+    throw std::invalid_argument("MultiHeadAttention: d_model must be divisible by num_heads");
+  }
+}
 
-Tensor MultiHeadAttention::forward(const Tensor& input) const {
+Tensor MultiHeadAttention::forward(const Tensor& input, const Tensor& mask) const {
   // input: [batch, seq, d_model]
   int64_t batch = input.sizes()[0];
   int64_t seq = input.sizes()[1];
@@ -103,6 +108,11 @@ Tensor MultiHeadAttention::forward(const Tensor& input) const {
   // Q @ K^T -> [batch, num_heads, seq, seq]
   Tensor scores = matmul(q, transpose(k, -2, -1));
   scores = scale(scores, 1.0f / std::sqrt(static_cast<float>(head_dim_)));
+
+  // apply mask: set padded positions to -inf before softmax
+  if (!mask.empty()) {
+    scores = add(scores, mask);
+  }
 
   // softmax over last dimension -> attention weights
   Tensor attn = softmax(scores);

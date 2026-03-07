@@ -45,6 +45,9 @@ Tensor scale(const Tensor& input, float scalar);
 // softmax along the last dimension of a tensor
 Tensor softmax(const Tensor& input);
 
+// returns index of maximum value along a given dimension
+Tensor argmax(const Tensor& input, int64_t dim);
+
 // tensor sum along dimension
 Tensor sum(const Tensor& input, int64_t dim, bool keepdim = false);
 
@@ -68,4 +71,7 @@ Tensor pow(const Tensor& input, float x);
 
 // unary clamp: out[i] = max(min_val, min(max_val, in[i]))
 Tensor clamp(const Tensor& input, float min_val, float max_val);
+
+// pad a tensor along a dimension to a target length using a given value
+Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value = 0.0f);
 }

@@ -49,7 +49,7 @@ private:
 class MultiHeadAttention {
 public:
   MultiHeadAttention(int64_t d_model, int64_t num_heads);
-  Tensor forward(const Tensor& input) const;
+  Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
 
   Linear& q_proj() { return q_proj_; }
   Linear& k_proj() { return k_proj_; }

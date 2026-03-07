@@ -1,4 +1,6 @@
 #include <tl/ops.h>
+#include <tl/factory.h>
+
 #include <cstdint> // for int64_t
 #include <stdexcept>
 #include <algorithm> // for max()
@@ -509,6 +511,47 @@ Tensor softmax(const Tensor& input) {
   return out;
 }
 
+// argmax, get index of maximum value along a given dimension
+Tensor argmax(const Tensor& input, int64_t dim) {
+  if (dim < 0) dim += input.sizes().size(); // dimension wrapping
+
+  const auto& sizes = input.sizes();
+  int64_t ndim = sizes.size();
+
+  // output shape is input shape with target dim collapsed
+  std::vector<int64_t> out_sizes;
+  for (int64_t i = 0; i < ndim; ++i) {
+    if (i != dim) out_sizes.push_back(sizes[i]);
+  }
+  if (out_sizes.empty()) out_sizes.push_back(1); // scalar case
+
+  Tensor out(out_sizes);
+  Tensor c = input.contiguous();
+  const float* ap = c.data();
+  float* op = out.data();
+
+  int64_t outer = 1, inner = 1, D = sizes[dim];
+  for (int64_t i = 0; i < dim; ++i) outer *= sizes[i];
+  for (int64_t i = dim + 1; i < ndim; ++i) inner *= sizes[i];
+
+  for (int64_t o = 0; o < outer; ++o) {
+    for (int64_t i = 0; i < inner; ++i) {
+      float best = ap[o * D * inner + i];
+      int64_t best_index = 0;
+      for (int64_t d = 1; d < D; ++d) {
+        float val = ap[o * D * inner + d * inner + i];
+        if (val > best) {
+          best = val;
+          best_index = d;
+        }
+      }
+      op[o * inner + i] = static_cast<float>(best_index);
+    }
+  }
+
+  return out;
+}
+
 // sum along the dimension of a tensor
 Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
   Tensor a = input.contiguous();
@@ -646,6 +689,40 @@ Tensor clamp(const Tensor& input, float min_val, float max_val) {
   for (int64_t i = 0; i < n; ++i) {
     op[i] = std::max(min_val, std::min(max_val, ap[i]));
   }
+  return out;
+}
+
+// pad a dimension with a given value to a target length
+Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value) {
+  if (dim < 0) dim += input.sizes().size();
+
+  const auto& sizes = input.sizes();
+  int64_t ndim = sizes.size();
+  int64_t current = sizes[dim];
+
+  if (target_len <= current) return input.contiguous();
+
+  // build output tensor shape
+  std::vector<int64_t> out_sizes(sizes.begin(), sizes.end());
+  out_sizes[dim] = target_len;
+
+  Tensor out = full(out_sizes, value);
+  Tensor c = input.contiguous();
+  const float* ap = c.data();
+  float* op = out.data();
+
+  int64_t outer = 1, inner = 1;
+  for (int64_t i = 0; i < dim; ++i) outer *= sizes[i];
+  for (int64_t i = dim + 1; i < ndim; ++i) inner *= sizes[i];
+
+  for (int64_t o = 0; o < outer; ++o) {
+    for (int64_t d = 0; d < current; ++d) { // copy up to original len, rest remains as pad value
+      for (int64_t i = 0; i < inner; ++i) {
+        op[o * target_len * inner + d * inner + i] = ap[o * current * inner + d * inner + i];
+      }
+    }
+  }
+
   return out;
 }
 

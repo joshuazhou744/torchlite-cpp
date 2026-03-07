@@ -10,6 +10,9 @@ namespace tl { // defines that Tensor is in the tl library
 // Tensor implementation state and methods
 class Tensor {
 public:
+    // default tensor constructor (empty)
+    Tensor();
+
     // construct a contiguous float tensor
     explicit Tensor(const std::vector<int64_t>& sizes);
 
@@ -26,8 +29,11 @@ public:
     const std::vector<int64_t>& strides() const;
     int64_t numel() const;
 
+    // data info
     bool is_contiguous() const;
     int64_t storage_offset() const;
+    bool empty() const;
+
 
 private:
     Tensor(std::shared_ptr<std::vector<float>> data,
