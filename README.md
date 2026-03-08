@@ -48,8 +48,8 @@ tests/              Test executables
 ```
 ## Dependencies
 
-- [Eigen3](https://eigen.tuxfamily.org/) — required by LibrosaCpp for audio preprocessing
-- [LibrosaCpp](https://github.com/ewan-xu/LibrosaCpp) — single-header mel spectrogram computation (included in `include/external/`)
+- [Eigen3](https://eigen.tuxfamily.org/): required by LibrosaCpp for audio preprocessing
+- [LibrosaCpp](https://github.com/ewan-xu/LibrosaCpp): single-header mel spectrogram computation (included in `include/external/`)
 
 ## Requirements
 
