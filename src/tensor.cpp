@@ -13,6 +13,8 @@
 #include <cstdint> // for int64_t
 #include <ostream>
 #include <algorithm> // for copy
+#include <set> // track visited tensors for autograd, uses set<Tensor*>
+#include <functional> // define a topo lambda function
 
 namespace tl {
 
@@ -187,5 +189,46 @@ Tensor Tensor::contiguous() const {
   }
   return out;
 }
+
+void Tensor::set_requires_grad(bool val) {
+  requires_grad = val;
+}
+
+Tensor& Tensor::grad() {
+  return grad_;
+}
+
+void Tensor::backward() {
+  // start with grad = 1.0
+  if (grad_.empty()) {
+    grad_ = Tensor(sizes_);
+    float* p = grad_.data();
+    for (int64_t i = 0; i < numel_; ++i) p[i] = 1.0f;
+  }
+
+  // topological sort, collect nodes in order
+  std::vector<Tensor*> order;
+  std::set<Tensor*> visited;
+  std::function<void(Tensor*)> topo = [&](Tensor* t) {
+    if (visited.count(t)) return;
+    visited.insert(t);
+    if (t->grad_fn) {
+      for (Tensor* input: t->grad_fn->inputs) {
+        topo(input);
+      }
+    }
+    order.push_back(t);
+  };
+  topo(this);
+
+  // walk in reverse and call backward on each node (tensor) in the computation graph
+  for (auto it = order.rbegin(); it != order.rend(); ++it) {
+    if ((*it)->grad_fn) {
+      (*it)->grad_fn->backward((*it)->grad_);
+    }
+  }
+}
+
+
 
 }

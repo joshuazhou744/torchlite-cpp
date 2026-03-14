@@ -18,7 +18,6 @@ A lightweight C++ tensor library implementing core PyTorch-like operations for C
 - Activation functions: ReLU, GELU, Sigmoid
 
 **Design**
-- Inference-only (no autograd)
 - CPU-only, float32 operations
 - Weight loading from raw binary files
 

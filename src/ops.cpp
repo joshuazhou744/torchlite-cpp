@@ -1,5 +1,6 @@
 #include <tl/ops.h>
 #include <tl/factory.h>
+#include <tl/autograd.h>
 
 #include <cstdint> // for int64_t
 #include <stdexcept>
@@ -81,6 +82,13 @@ Tensor add(const Tensor& a, const Tensor& b) {
     int64_t index_b = get_broadcast_index(i, sizes_b, strides_b, out_shape);
 
     op[i] = ap[index_a] + bp[index_b];
+  }
+
+  if (a.requires_grad || b.requires_grad) {
+    out.requires_grad = true;
+    auto fn = std::make_shared<AddBackward>();
+    fn->inputs = {const_cast<Tensor*>(&a), const_cast<Tensor*>(&b)};
+    out.grad_fn = fn;
   }
   return out;
 }

@@ -7,6 +7,8 @@
 
 namespace tl { // defines that Tensor is in the tl library
 
+class GradFunction; // forward declaration
+
 // Tensor implementation state and methods
 class Tensor {
 public:
@@ -34,6 +36,12 @@ public:
     int64_t storage_offset() const;
     bool empty() const;
 
+    // autograd public methods
+    void set_requires_grad(bool val);
+    Tensor& grad();
+    void backward();
+    bool requires_grad = false; // should we track gradient of this tensor
+    std::shared_ptr<GradFunction> grad_fn; // operation that created this tensor
 
 private:
     Tensor(std::shared_ptr<std::vector<float>> data,
@@ -51,6 +59,10 @@ private:
     // grant access to ops that need to create views
     friend Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1);
     friend Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes);
+
+
+    // autograd
+    Tensor grad_; // accumulated gradients
 };
 
   std::ostream& operator<<(std::ostream& os, const Tensor& t);
