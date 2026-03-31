@@ -1,11 +1,14 @@
 #pragma once
 
 #include <tl/tensor.h>
+
 #include <vector>
+#include <cstdint>
 #include <memory>
 #include <functional>
 
 namespace tl {
+
 
 // base class for ALL backward functions
 class GradFunction {
@@ -23,5 +26,66 @@ class AddBackward: public GradFunction {
 public:
   void backward(const Tensor& grad_output) override;
 };
+
+class SubBackward: public GradFunction {
+public:
+  void backward(const Tensor& grad_output) override;
+};
+
+class NegBackward: public GradFunction {
+public:
+  void backward(const Tensor& grad_output) override;
+};
+
+class ScaleBackward: public GradFunction {
+public:
+  float scalar;
+  void backward(const Tensor& grad_output) override;
+};
+
+class ReluBackward: public GradFunction {
+public:
+  Tensor input_cache; // remember where input > 0
+  void backward(const Tensor& grad_output) override;
+};
+
+class SumBackward: public GradFunction {
+public:
+  std::vector<int64_t> input_shape;
+  void backward(const Tensor& grad_output) override;
+};
+
+class MeanBackward: public GradFunction {
+public:
+  std::vector<int64_t> input_shape;
+  int64_t dim_size; // size of the reduced dim
+  void backward(const Tensor& grad_output) override;
+};
+
+class ReshapeBackward: public GradFunction {
+public:
+  std::vector<int64_t> input_shape;
+  void backward(const Tensor& grad_output) override;
+};
+
+class TransposeBackward: public GradFunction {
+public:
+  int64_t dim0, dim1;
+  void backward(const Tensor& grad_output) override;
+};
+
+
+// Helper functions
+
+template<typename BackwardFn>
+std::shared_ptr<BackwardFn> track(Tensor& out, std::initializer_list<const Tensor*> inputs) {
+  out.requires_grad = true;
+  auto fn = std::make_shared<BackwardFn>();
+  for (auto* t: inputs) {
+    fn->inputs.push_back(const_cast<Tensor*>(t));
+  }
+  out.grad_fn = fn;
+  return fn;
+}
 
 }
