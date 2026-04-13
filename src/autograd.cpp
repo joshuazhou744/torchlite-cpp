@@ -69,4 +69,35 @@ void TransposeBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], transpose(grad_output, dim0, dim1));
 }
 
+void MulBackward::backward(const Tensor& grad_output) {
+  accumulate_grad(inputs[0], mul(grad_output, b_cache));
+  accumulate_grad(inputs[1], mul(grad_output, a_cache));
+}
+
+void DivBackward::backward(const Tensor& grad_output) {
+  // z = a / b
+  // d_a = grad / b
+  accumulate_grad(inputs[0], div(grad_output, b_cache));
+
+  // d_b = -grad * a / (b^2)
+  Tensor b_sq = mul(b_cache, b_cache);
+  Tensor num = mul(grad_output, a_cache);
+  Tensor grad_b = neg(div(num, b_sq));
+  accumulate_grad(inputs[1], grad_b);
+}
+
+void SigmoidBackward::backward(const Tensor& grad_output) {
+  // d_in = grad * out * (1 - out)
+  Tensor out = output_cache.contiguous();
+  Tensor g = grad_output.contiguous();
+  Tensor result(out.sizes());
+  const float* op = out.data();
+  const float* gp = g.data();
+  float* rp = result.data();
+  for (int64_t i = 0; i < out.numel(); ++i) {
+    rp[i] = gp[i] * op[i] * (1.0f - op[i]);
+  }
+  accumulate_grad(inputs[0], result);
+}
+
 } // tl

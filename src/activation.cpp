@@ -17,6 +17,12 @@ Tensor sigmoid(const Tensor& input) {
   for (int64_t i = 0; i < a.numel(); ++i) {
     op[i] = 1.0f / (1.0f + std::exp(-ap[i]));
   }
+
+  if (input.requires_grad) {
+    auto fn = track<SigmoidBackward>(out, {&input});
+    fn->output_cache = out.contiguous();
+  }
+
   return out;
 }
 

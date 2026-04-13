@@ -164,6 +164,13 @@ Tensor mul(const Tensor& a, const Tensor& b) {
 
     op[i] = ap[index_a] * bp[index_b];
   }
+
+  if (a.requires_grad || b.requires_grad) {
+    auto fn = track<MulBackward>(out, {&a, &b});
+    fn->a_cache = a.contiguous();
+    fn->b_cache = b.contiguous();
+  }
+
   return out;
 }
 
@@ -190,6 +197,13 @@ Tensor div(const Tensor& a, const Tensor& b) {
 
     op[i] = ap[index_a] / bp[index_b];
   }
+
+  if (a.requires_grad || b.requires_grad) {
+    auto fn = track<DivBackward>(out, {&a, &b});
+    fn->a_cache = a.contiguous();
+    fn->b_cache = b.contiguous();
+  }
+
   return out;
 }
 
