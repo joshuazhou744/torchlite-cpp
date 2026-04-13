@@ -1,4 +1,6 @@
 #include <tl/activation.h>
+#include <tl/autograd.h>
+
 #include <cmath> // exp, tanh, sqrt
 #include <algorithm> // max
 #include <cstdint> // int64_t
@@ -29,6 +31,11 @@ Tensor relu(const Tensor& input) {
   const int64_t n = a.numel();
   for (int64_t i = 0; i < n; ++i) {
       op[i] = std::max(0.0f, ap[i]);
+  }
+
+  if (input.requires_grad) {
+    auto fn = track<ReluBackward>(out, {&input});
+    fn->input_cache = input.contiguous();
   }
 
   return out;

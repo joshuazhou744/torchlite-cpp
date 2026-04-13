@@ -90,6 +90,10 @@ Tensor add(const Tensor& a, const Tensor& b) {
     fn->inputs = {const_cast<Tensor*>(&a), const_cast<Tensor*>(&b)};
     out.grad_fn = fn;
   }
+
+  if (a.requires_grad || b.requires_grad) {
+    track<AddBackward>(out, {&a, &b});
+  }
   return out;
 }
 
@@ -112,6 +116,10 @@ Tensor sub(const Tensor& a, const Tensor& b) {
     int64_t index_a = get_broadcast_index(i, sizes_a, strides_a, out_shape);
     int64_t index_b = get_broadcast_index(i, sizes_b, strides_b, out_shape);
     op[i] = ap[index_a] - bp[index_b];
+  }
+
+  if (a.requires_grad || b.requires_grad) {
+    track<SubBackward>(out, {&a, &b});
   }
 
   return out;
@@ -293,8 +301,16 @@ Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1) {
   std::swap(out_sizes[dim0], out_sizes[dim1]);
   std::swap(out_strides[dim0], out_strides[dim1]);
 
+  Tensor out(a.data_, out_sizes, out_strides, a.offset_);
+
+  if (a.requires_grad) {
+    auto fn = track<TransposeBackward>(out, {&a});
+    fn->dim0 = dim0;
+    fn->dim1 = dim1;
+  }
+
   // use private constructor to create new view
-  return Tensor(a.data_, out_sizes, out_strides, a.offset_);
+  return out;
 }
 
 Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
@@ -322,8 +338,15 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
     stride *= new_sizes[i];
   }
 
+  Tensor out(c.data_, new_sizes, new_strides, c.offset_);
+
+  if (a.requires_grad) {
+    auto fn = track<ReshapeBackward>(out, {&a});
+    fn->input_shape = a.sizes();
+  }
+
   // create new view using private constructor
-  return Tensor(c.data_, new_sizes, new_strides, c.offset_);
+  return out;
 }
 
 // tensor concatenation along existing dimension
@@ -467,6 +490,11 @@ Tensor scale(const Tensor& input, float scalar) {
     op[i] = ap[i] * scalar;
   }
 
+  if (input.requires_grad) {
+    auto fn = track<ScaleBackward>(out, {&input});
+    fn->scalar = scalar;
+  }
+
   return out;
 }
 
@@ -604,6 +632,11 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
     }
   }
 
+  if (input.requires_grad) {
+    auto fn = track<SumBackward>(out, {&input});
+    fn->input_shape = input.sizes();
+  }
+
   return out;
 }
 
@@ -617,6 +650,12 @@ Tensor mean(const Tensor& input, int64_t dim, bool keepdim) {
   int64_t D = input.sizes()[dim];
   if (D == 0) {
     throw std::invalid_argument("Mean: cannot reduce a zero-sized dimension");
+  }
+
+  if (input.requires_grad) {
+    auto fn = track<MeanBackward>(out, {&input});
+    fn->input_shape = input.sizes();
+    fn->dim_size = input.sizes()[dim];
   }
 
   return scale(s, 1.0f / static_cast<float>(D));
@@ -645,6 +684,11 @@ Tensor neg(const Tensor& input) {
   for (int64_t i = 0; i < n; ++i) {
     op[i] = -ap[i];
   }
+
+  if (input.requires_grad) {
+    track<NegBackward>(out, {&input});
+  }
+
   return out;
 }
 

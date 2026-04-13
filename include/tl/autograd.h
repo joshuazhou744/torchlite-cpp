@@ -74,6 +74,36 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class MulBackward: public GradFunction {
+public:
+  Tensor a_cache, b_cache; // need both inputs for gradient
+  void backward(const Tensor& grad_output) override;
+};
+
+class DivBackward: public GradFunction {
+public:
+  Tensor a_cache, b_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
+class SigmoidBackward: public GradFunction {
+public:
+  Tensor output_cache; // sigmoid output, not input
+  void backward(const Tensor& grad_output) override;
+};
+
+class GeluBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
+class SoftmaxBackward: public GradFunction {
+public:
+  Tensor output_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
 
 // Helper functions
 
