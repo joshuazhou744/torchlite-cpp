@@ -27,26 +27,31 @@ Build the library:
 
 ```bash
 mkdir build && cd build
-cmake ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 
+The **Release** build enables optimizations (`-O3 -match=native -DNDEBUG`):
+    - `-O3`: aggressive compiler optimizations
+    - `-match=native`: targets CPU specific instruction set
+    - `-DNDEBUG`: disables `assert()` calls in hot paths
+
 Run tests:
 
-```bash
+```
 ./build/run_tests
 ```
 
 ## Project Structure
 
 ```
-include/tl/         Public API headers (tensor, ops, nn, activation, factory)
+include/tl/         Public API headers (tensor, ops, nn, activation, factory, autograd)
 include/external/   Third-party headers (LibrosaCpp)
 src/                Implementation
 tests/              Test executables
 ```
-## Dependencies
 
+## Dependencies
 - [Eigen3](https://eigen.tuxfamily.org/): required by LibrosaCpp for audio preprocessing
 - [LibrosaCpp](https://github.com/ewan-xu/LibrosaCpp): single-header mel spectrogram computation (included in `include/external/`)
 
@@ -63,15 +68,15 @@ tests/              Test executables
 When composing multiple operations in expressions that require gradient tracking, assign each intermediate result to a named variable. The graph stores raw pointers to its inputs, so temporaries destroyed at the end of an expression leave dangling pointers that lead to segmentation faults during backpropagation.
 
 ```cpp
+// this will seg fault
 Tensor y = add(mul(a, b), c);
-y.backward(); // this will seg fault
+y.backward();
 
+// this is fine
 Tensor prod = mul(a, b);
 Tensor y = add(prod, c);
-y.backward(); // this is fine
+y.backward();
 ```
-
-I will fix this sometime later.
 
 ## License
 

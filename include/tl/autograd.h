@@ -129,6 +129,15 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class MatmulBackward: public GradFunction {
+public:
+  Tensor a_cache, b_cache;
+  // shape infor for un-broadcasting
+  std::vector<int64_t> a_batch_shape, b_batch_shape;
+  bool squeeze_a = false, squeeze_b = false;
+  void backward(const Tensor& grad_output) override;
+};
+
 // Helper functions
 
 template<typename BackwardFn>
