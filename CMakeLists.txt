@@ -3,6 +3,7 @@ project(torchlite_cpp LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
 
 # library components
 add_library(torchlite
@@ -11,6 +12,7 @@ add_library(torchlite
     src/activation.cpp
     src/factory.cpp
     src/nn.cpp
+    src/autograd.cpp
 )
 
 target_include_directories(torchlite
@@ -25,5 +27,6 @@ add_executable(run_tests
   tests/test_activation.cpp
   tests/test_factory.cpp
   tests/test_nn.cpp
+  tests/test_autograd.cpp
 )
 target_link_libraries(run_tests PRIVATE torchlite)

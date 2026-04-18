@@ -7,6 +7,8 @@
 
 
 #include <tl/tensor.h>
+#include <tl/autograd.h>
+
 #include <numeric> // for std::accumulate
 #include <stdexcept> // for std::invalid_argument exception
 #include <limits> // for std::numeric_limits
@@ -195,14 +197,17 @@ void Tensor::set_requires_grad(bool val) {
 }
 
 Tensor& Tensor::grad() {
-  return grad_;
+  if (!grad_) grad_ = std::make_shared<Tensor>();
+  return *grad_;
 }
 
 void Tensor::backward() {
+  if (!grad_) grad_ = std::make_shared<Tensor>();
+
   // start with grad = 1.0
-  if (grad_.empty()) {
-    grad_ = Tensor(sizes_);
-    float* p = grad_.data();
+  if (grad_->empty()) {
+    *grad_ = Tensor(sizes_);
+    float* p = grad_->data();
     for (int64_t i = 0; i < numel_; ++i) p[i] = 1.0f;
   }
 
@@ -224,7 +229,7 @@ void Tensor::backward() {
   // walk in reverse and call backward on each node (tensor) in the computation graph
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
     if ((*it)->grad_fn) {
-      (*it)->grad_fn->backward((*it)->grad_);
+      (*it)->grad_fn->backward(*(*it)->grad_);
     }
   }
 }

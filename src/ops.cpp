@@ -137,6 +137,11 @@ Tensor sqrt(const Tensor& input) {
     op[i] = std::sqrt(ap[i]);
   }
 
+  if (input.requires_grad) {
+    auto fn = track<SqrtBackward>(out, {&input});
+    fn->output_cache = out.contiguous();
+  }
+
   return out;
 }
 
@@ -558,6 +563,11 @@ Tensor softmax(const Tensor& input) {
 
   }
 
+  if (input.requires_grad) {
+    auto fn = track<SoftmaxBackward>(out, {&input});
+    fn->output_cache = out.contiguous();
+  }
+
   return out;
 }
 
@@ -666,12 +676,6 @@ Tensor mean(const Tensor& input, int64_t dim, bool keepdim) {
     throw std::invalid_argument("Mean: cannot reduce a zero-sized dimension");
   }
 
-  if (input.requires_grad) {
-    auto fn = track<MeanBackward>(out, {&input});
-    fn->input_shape = input.sizes();
-    fn->dim_size = input.sizes()[dim];
-  }
-
   return scale(s, 1.0f / static_cast<float>(D));
 }
 
@@ -716,6 +720,12 @@ Tensor exp(const Tensor& input) {
   for (int64_t i = 0; i < n; ++i) {
     op[i] = std::exp(ap[i]);
   }
+
+  if (input.requires_grad) {
+    auto fn = track<ExpBackward>(out, {&input});
+    fn->output_cache = out.contiguous();
+  }
+
   return out;
 }
 
@@ -729,6 +739,13 @@ Tensor pow(const Tensor& input, float x) {
   for (int64_t i = 0; i < n; ++i) {
     op[i] = std::pow(ap[i], x);
   }
+
+  if (input.requires_grad) {
+    auto fn = track<PowBackward>(out, {&input});
+    fn->input_cache = input.contiguous();
+    fn->exponent = x;
+  }
+
   return out;
 }
 
@@ -742,6 +759,12 @@ Tensor log(const Tensor& input) {
   for (int64_t i = 0; i < n; ++i) {
     op[i] = std::log(ap[i]);
   }
+
+  if (input.requires_grad) {
+    auto fn = track<LogBackward>(out, {&input});
+    fn->input_cache = input.contiguous();
+  }
+
   return out;
 }
 
@@ -755,6 +778,14 @@ Tensor clamp(const Tensor& input, float min_val, float max_val) {
   for (int64_t i = 0; i < n; ++i) {
     op[i] = std::max(min_val, std::min(max_val, ap[i]));
   }
+
+  if (input.requires_grad) {
+    auto fn = track<ClampBackward>(out, {&input});
+    fn->input_cache = input.contiguous();
+    fn->min_val = min_val;
+    fn->max_val = max_val;
+  }
+
   return out;
 }
 

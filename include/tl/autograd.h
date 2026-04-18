@@ -55,13 +55,6 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
-class MeanBackward: public GradFunction {
-public:
-  std::vector<int64_t> input_shape;
-  int64_t dim_size; // size of the reduced dim
-  void backward(const Tensor& grad_output) override;
-};
-
 class ReshapeBackward: public GradFunction {
 public:
   std::vector<int64_t> input_shape;
@@ -104,6 +97,37 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class SqrtBackward: public GradFunction {
+public:
+  Tensor output_cache; // cache output for 1/(2*y)
+  void backward(const Tensor& grad_output) override;
+};
+
+class PowBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  float exponent;
+  void backward(const Tensor& grad_output) override;
+};
+
+class LogBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
+class ExpBackward: public GradFunction {
+public:
+  Tensor output_cache; // derivative is the output itself
+  void backward(const Tensor& grad_output) override;
+};
+
+class ClampBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  float min_val, max_val;
+  void backward(const Tensor& grad_output) override;
+};
 
 // Helper functions
 

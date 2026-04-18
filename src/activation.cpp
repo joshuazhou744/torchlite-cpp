@@ -60,6 +60,12 @@ Tensor gelu(const Tensor& input) {
     float x = ap[i];
     op[i] = 0.5f * x * (1.0f + std::tanh(sqrt_2_over_pi * (x + 0.044715f * x * x * x)));
   }
+
+  if (input.requires_grad) {
+    auto fn = track<GeluBackward>(out, {&input});
+    fn->input_cache = input.contiguous();
+  }
+
   return out;
 }
 

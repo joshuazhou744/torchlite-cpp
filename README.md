@@ -56,6 +56,23 @@ tests/              Test executables
 - CMake 3.10+
 - Eigen3 (`sudo apt install libeigen3-dev`)
 
+## Usage Notes
+
+### Autograd: always use named intermediates
+
+When composing multiple operations in expressions that require gradient tracking, assign each intermediate result to a named variable. The graph stores raw pointers to its inputs, so temporaries destroyed at the end of an expression leave dangling pointers that lead to segmentation faults during backpropagation.
+
+```cpp
+Tensor y = add(mul(a, b), c);
+y.backward(); // this will seg fault
+
+Tensor prod = mul(a, b);
+Tensor y = add(prod, c);
+y.backward(); // this is fine
+```
+
+I will fix this sometime later.
+
 ## License
 
 MIT License

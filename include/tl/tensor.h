@@ -62,7 +62,7 @@ private:
 
 
     // autograd
-    Tensor grad_; // accumulated gradients
+    std::shared_ptr<Tensor> grad_; // accumulated gradients
 };
 
   std::ostream& operator<<(std::ostream& os, const Tensor& t);
