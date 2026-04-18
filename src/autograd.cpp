@@ -227,5 +227,16 @@ void ClampBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], result);
 }
 
+void MatmulBackward::backward(const Tensor& grad_output) {
+  // level 1: 2D matmul backward only
+  // A: (M, K), B:(K, N), C: (M, N)
+  // dA = grad @ B^T
+  // dB = A^T @ grad
+  Tensor at = transpose(a_cache, 0, 1);
+  Tensor bt = transpose(b_cache, 0, 1);
+  accumulate_grad(inputs[0], matmul(grad_output, bt));
+  accumulate_grad(inputs[1], matmul(at, grad_output));
+}
+
 
 } // tl

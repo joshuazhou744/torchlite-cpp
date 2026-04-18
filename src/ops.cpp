@@ -288,6 +288,14 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
       }
     }
   }
+
+  bool both_2d = (a_in.sizes().size() == 2) && (b_in.sizes().size() == 2);
+  if ((a_in.requires_grad || b_in.requires_grad) && both_2d) {
+    auto fn = track<MatmulBackward>(out, {&a_in, &b_in});
+    fn->a_cache = a_in.contiguous();
+    fn->b_cache = b_in.contiguous();
+  }
+
   if (squeeze_a && squeeze_b) { // both squeezed
     return reshape(out, {}); // [1, K] @ [K, 1] -> [1, 1] -> scalar
   } else if (squeeze_a) { // only first input matrix squeezed

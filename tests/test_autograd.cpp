@@ -138,5 +138,47 @@ void test_autograd() {
     std::cout << "  Gradient accumulation (a * a) ok\n";
   }
 
+  // MatmulBackward (Level 1 — pure 2D): dA = grad @ B^T, dB = A^T @ grad
+  // A = [[1,2,3],[4,5,6]]          shape (2,3)
+  // B = [[1,2],[3,4],[5,6]]        shape (3,2)
+  // Seed grad = ones(2,2).
+  // dA[i,k] = sum_n(grad[i,n] * B[k,n]) = sum_n B[k,n] = row sum of B.
+  //   B row sums: [1+2, 3+4, 5+6] = [3, 7, 11]
+  //   dA = [[3,7,11], [3,7,11]]
+  // dB[k,n] = sum_i(A[i,k] * grad[i,n]) = sum_i A[i,k] = col sum of A.
+  //   A col sums: [1+4, 2+5, 3+6] = [5, 7, 9]
+  //   dB = [[5,5], [7,7], [9,9]]
+  {
+    tl::Tensor A({2, 3});
+    tl::Tensor B({3, 2});
+    for (int i = 0; i < 6; ++i) { A.data()[i] = i + 1.0f; B.data()[i] = i + 1.0f; }
+    A.set_requires_grad(true);
+    B.set_requires_grad(true);
+
+    tl::Tensor C = tl::matmul(A, B);
+    C.backward();
+
+    assert(!A.grad().empty());  // sanity: tracking actually ran
+    assert(!B.grad().empty());
+
+    // check dA
+    assert(close(A.grad().data()[0], 3.0f));
+    assert(close(A.grad().data()[1], 7.0f));
+    assert(close(A.grad().data()[2], 11.0f));
+    assert(close(A.grad().data()[3], 3.0f));
+    assert(close(A.grad().data()[4], 7.0f));
+    assert(close(A.grad().data()[5], 11.0f));
+
+    // check dB
+    assert(close(B.grad().data()[0], 5.0f));
+    assert(close(B.grad().data()[1], 5.0f));
+    assert(close(B.grad().data()[2], 7.0f));
+    assert(close(B.grad().data()[3], 7.0f));
+    assert(close(B.grad().data()[4], 9.0f));
+    assert(close(B.grad().data()[5], 9.0f));
+
+    std::cout << "  MatmulBackward (2D) ok\n";
+  }
+
   std::cout << "Autograd tests passed.\n\n";
 }
