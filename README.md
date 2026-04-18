@@ -32,9 +32,9 @@ make
 ```
 
 The **Release** build enables optimizations (`-O3 -match=native -DNDEBUG`):
-    - `-O3`: aggressive compiler optimizations
-    - `-match=native`: targets CPU specific instruction set
-    - `-DNDEBUG`: disables `assert()` calls in hot paths
+- `-O3`: aggressive compiler optimizations
+- `-match=native`: targets CPU specific instruction set
+- `-DNDEBUG`: disables `assert()` calls in hot paths
 
 Run tests:
 
