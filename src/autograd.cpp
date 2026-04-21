@@ -17,6 +17,16 @@ static void accumulate_grad(Tensor* t, const Tensor& grad) {
   t->grad() = add(t->grad(), grad);
 }
 
+static Tensor sum_to(Tensor grad, const std::vector<int64_t>& target_shape) {
+  while (grad.sizes().size() > target_shape.size()) {
+    grad = sum(grad, 0, false);
+  }
+  return grad;
+}
+
+
+// Backward functions
+
 void AddBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], grad_output);
   accumulate_grad(inputs[1], grad_output);
@@ -228,14 +238,29 @@ void ClampBackward::backward(const Tensor& grad_output) {
 }
 
 void MatmulBackward::backward(const Tensor& grad_output) {
-  // level 1: 2D matmul backward only
   // A: (M, K), B:(K, N), C: (M, N)
   // dA = grad @ B^T
   // dB = A^T @ grad
-  Tensor at = transpose(a_cache, 0, 1);
-  Tensor bt = transpose(b_cache, 0, 1);
-  accumulate_grad(inputs[0], matmul(grad_output, bt));
-  accumulate_grad(inputs[1], matmul(at, grad_output));
+
+  // Tensor grad = grad_output;
+  // if (squeeze_a) grad = reshape(grad, {1, grad.sizes()[0]});
+  // if (squeeze_b) grad = reshape(grad, {grad.sizes()[0], 1});
+
+  // reverse squeeze handling
+  Tensor a = squeeze_a ? reshape(a_cache, {1, a_cache.sizes()[0]}) : a_cache;
+  Tensor b = squeeze_b ? reshape(b_cache, {b_cache.sizes()[0], 1}) : b_cache;
+
+  // transpose each input
+  Tensor at = transpose(a, -2, -1);
+  Tensor bt = transpose(b, -2, -1);
+
+  // compute derivatives with batch handling
+  Tensor da = sum_to(matmul(grad_output, bt), a_cache.sizes());
+  Tensor db = sum_to(matmul(at, grad_output), b_cache.sizes());
+
+  // accumulate gradients
+  accumulate_grad(inputs[0], da);
+  accumulate_grad(inputs[1], db);
 }
 
 

@@ -217,7 +217,7 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
   Tensor a = a_in.contiguous();
   Tensor b = b_in.contiguous();
 
-  // squeeze and track 1D matrices
+// squeeze and track 1D matrices
   bool squeeze_a = false, squeeze_b = false;
   if (a.sizes().size() == 1) {
     a = reshape(a, {1, a.sizes()[0]}); // [K] -> [1, K]
@@ -289,12 +289,6 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     }
   }
 
-  bool both_2d = (a_in.sizes().size() == 2) && (b_in.sizes().size() == 2);
-  if ((a_in.requires_grad || b_in.requires_grad) && both_2d) {
-    auto fn = track<MatmulBackward>(out, {&a_in, &b_in});
-    fn->a_cache = a_in.contiguous();
-    fn->b_cache = b_in.contiguous();
-  }
 
   if (squeeze_a && squeeze_b) { // both squeezed
     return reshape(out, {}); // [1, K] @ [K, 1] -> [1, 1] -> scalar
@@ -307,6 +301,15 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     s.erase(s.end() - 1); // [..., M, 1] @ [..., M], remove fake col dim
     return reshape(out, s);
   }
+
+  if (a_in.requires_grad || b_in.requires_grad) {
+    auto fn = track<MatmulBackward>(out, {&a_in, &b_in});
+    fn->a_cache = a_in.contiguous();
+    fn->b_cache = b_in.contiguous();
+    fn->squeeze_a = squeeze_a;
+    fn->squeeze_b = squeeze_b;
+  }
+
   return out;
 }
 

@@ -178,6 +178,85 @@ void test_autograd() {
     assert(close(B.grad().data()[5], 9.0f));
 
     std::cout << "  MatmulBackward (2D) ok\n";
+
+    // MatmulBackward Level 2 — batched (B, M, K) @ (B, K, N)
+    // A = ones(2, 2, 3), B = ones(2, 3, 2), seed grad = ones(2, 2, 2)
+    // dA[b,i,k] = sum_n grad[b,i,n] * B[b,k,n] = sum_n 1 = N = 2
+    // dB[b,k,n] = sum_i A[b,i,k] * grad[b,i,n] = sum_i 1 = M = 2
+    {
+      tl::Tensor A({2, 2, 3});
+      tl::Tensor B({2, 3, 2});
+      for (int i = 0; i < 12; ++i) { A.data()[i] = 1.0f; B.data()[i] = 1.0f; }
+      A.set_requires_grad(true);
+      B.set_requires_grad(true);
+
+      tl::Tensor C = tl::matmul(A, B);
+      C.backward();
+
+      for (int i = 0; i < 12; ++i) assert(close(A.grad().data()[i], 2.0f));
+      for (int i = 0; i < 12; ++i) assert(close(B.grad().data()[i], 2.0f));
+      std::cout << "  MatmulBackward (batched 3D) ok\n";
+    }
+
+    // MatmulBackward Level 3 — broadcast batch: (B, M, K) @ (K, N)
+    // A = ones(2, 3, 4), B = ones(4, 2), seed grad = ones(2, 3, 2)
+    // dA: grad @ B^T -> (2,3,2) @ (2,4) = (2,3,4), each entry = sum of B row = 2
+    // dB: A^T @ grad -> (4,3) @ (3,2) summed over batch -> (4,2), each entry = M*B = 3*2 = 6
+    {
+      tl::Tensor A({2, 3, 4});
+      tl::Tensor B({4, 2});
+      for (int i = 0; i < 24; ++i) A.data()[i] = 1.0f;
+      for (int i = 0; i < 8;  ++i) B.data()[i] = 1.0f;
+      A.set_requires_grad(true);
+      B.set_requires_grad(true);
+
+      tl::Tensor C = tl::matmul(A, B);  // (2, 3, 2)
+      C.backward();
+
+      for (int i = 0; i < 24; ++i) assert(close(A.grad().data()[i], 2.0f));
+      for (int i = 0; i < 8;  ++i) assert(close(B.grad().data()[i], 6.0f));
+      std::cout << "  MatmulBackward (broadcast batch) ok\n";
+    }
+
+     // MatmulBackward Level 4a — (K,) @ (K, N): vector-matrix
+    {
+      tl::Tensor a({4});
+      tl::Tensor B({4, 3});
+      for (int i = 0; i < 4; ++i) a.data()[i] = 1.0f;
+      for (int i = 0; i < 12; ++i) B.data()[i] = 1.0f;
+      a.set_requires_grad(true);
+      B.set_requires_grad(true);
+
+      tl::Tensor c = tl::matmul(a, B);  // (3,)
+      c.backward();
+
+      // da = grad @ B^T, grad=ones(3), B^T=(3,4) -> da=ones(4)*3=3
+      for (int i = 0; i < 4; ++i) assert(close(a.grad().data()[i], 3.0f));
+      // dB = a^T @ grad -> (4,1)@(1,3) = (4,3), each entry = 1
+      for (int i = 0; i < 12; ++i) assert(close(B.grad().data()[i], 1.0f));
+      std::cout << "  MatmulBackward (vec @ mat) ok\n";
+    }
+
+    // MatmulBackward Level 4b — (M, K) @ (K,): matrix-vector
+    {
+      tl::Tensor A({3, 4});
+      tl::Tensor b({4});
+      for (int i = 0; i < 12; ++i) A.data()[i] = 1.0f;
+      for (int i = 0; i < 4; ++i) b.data()[i] = 1.0f;
+      A.set_requires_grad(true);
+      b.set_requires_grad(true);
+
+      tl::Tensor c = tl::matmul(A, b);  // (3,)
+      c.backward();
+
+      // dA = grad @ b^T, grad=ones(3), b^T=(1,4) -> dA=(3,4) all ones
+      for (int i = 0; i < 12; ++i) assert(close(A.grad().data()[i], 1.0f));
+      // db = A^T @ grad -> (4,3)@(3,) -> (4,) each = sum of col of A = 3
+      for (int i = 0; i < 4; ++i) assert(close(b.grad().data()[i], 3.0f));
+      std::cout << "  MatmulBackward (mat @ vec) ok\n";
+    }
+
+
   }
 
   std::cout << "Autograd tests passed.\n\n";
