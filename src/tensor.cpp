@@ -192,12 +192,17 @@ Tensor Tensor::contiguous() const {
   return out;
 }
 
+void Tensor::ensure_grad() {
+  if (!grad_) grad_ = std::make_shared<Tensor>();
+}
+
 void Tensor::set_requires_grad(bool val) {
   requires_grad = val;
+  if (val) ensure_grad();
 }
 
 Tensor& Tensor::grad() {
-  if (!grad_) grad_ = std::make_shared<Tensor>();
+  ensure_grad();
   return *grad_;
 }
 
@@ -213,13 +218,14 @@ void Tensor::backward() {
 
   // topological sort, collect nodes in order
   std::vector<Tensor*> order;
-  std::set<Tensor*> visited;
+  std::set<void*> visited;
   std::function<void(Tensor*)> topo = [&](Tensor* t) {
-    if (visited.count(t)) return;
-    visited.insert(t);
+    void* key = (t->grad_ ? (void*)t->grad_.get() : (void*)t);
+    if (visited.count(key)) return;
+    visited.insert(key);
     if (t->grad_fn) {
-      for (Tensor* input: t->grad_fn->inputs) {
-        topo(input);
+      for (auto& input: t->grad_fn->inputs) {
+        topo(&input);
       }
     }
     order.push_back(t);
@@ -227,6 +233,7 @@ void Tensor::backward() {
   topo(this);
 
   // walk in reverse and call backward on each node (tensor) in the computation graph
+  NoGradGuard no_grad;
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
     if ((*it)->grad_fn) {
       (*it)->grad_fn->backward(*(*it)->grad_);

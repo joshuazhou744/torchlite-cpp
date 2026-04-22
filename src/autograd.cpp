@@ -9,12 +9,12 @@ namespace tl {
 
 // Helper functions
 
-static void accumulate_grad(Tensor* t, const Tensor& grad) {
-  if (!t->requires_grad) return;
-  if (t->grad().empty()) {
-    t->grad() = zeros(t->sizes());
+static void accumulate_grad(Tensor& t, const Tensor& grad) {
+  if (!t.requires_grad) return;
+  if (t.grad().empty()) {
+    t.grad() = zeros(t.sizes());
   }
-  t->grad() = add(t->grad(), grad);
+  t.grad() = add(t.grad(), grad);
 }
 
 static Tensor sum_to(Tensor grad, const std::vector<int64_t>& target_shape) {

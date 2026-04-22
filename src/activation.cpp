@@ -19,8 +19,9 @@ Tensor sigmoid(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<SigmoidBackward>(out, {&input});
-    fn->output_cache = out.contiguous();
+    if (auto fn = track<SigmoidBackward>(out, {&input})) {
+      fn->output_cache = out.contiguous();
+    }
   }
 
   return out;
@@ -40,8 +41,9 @@ Tensor relu(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<ReluBackward>(out, {&input});
-    fn->input_cache = input.contiguous();
+    if (auto fn = track<ReluBackward>(out, {&input})) {
+      fn->input_cache = input.contiguous();
+    }
   }
 
   return out;
@@ -62,8 +64,9 @@ Tensor gelu(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<GeluBackward>(out, {&input});
-    fn->input_cache = input.contiguous();
+    if (auto fn = track<GeluBackward>(out, {&input})) {
+      fn->input_cache = input.contiguous();
+    }
   }
 
   return out;

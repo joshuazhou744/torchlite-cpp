@@ -9,6 +9,12 @@
 
 namespace tl {
 
+inline bool& grad_enabled() { static bool e = true; return e; }
+
+struct NoGradGuard {
+  NoGradGuard() { grad_enabled() = false; }
+  ~NoGradGuard() { grad_enabled() = true; }
+};
 
 // base class for ALL backward functions
 class GradFunction {
@@ -19,7 +25,7 @@ public:
   virtual void backward(const Tensor& grad_output) = 0;
 
   // inputs that need gradients
-  std::vector<Tensor*> inputs;
+  std::vector<Tensor> inputs;
 };
 
 class AddBackward: public GradFunction {
@@ -146,10 +152,13 @@ public:
 
 template<typename BackwardFn>
 std::shared_ptr<BackwardFn> track(Tensor& out, std::initializer_list<const Tensor*> inputs) {
+  if (!grad_enabled()) return nullptr;
   out.requires_grad = true;
+  out.ensure_grad();
   auto fn = std::make_shared<BackwardFn>();
   for (auto* t: inputs) {
-    fn->inputs.push_back(const_cast<Tensor*>(t));
+    const_cast<Tensor*>(t)->ensure_grad();
+    fn->inputs.push_back(*const_cast<Tensor*>(t)); // shallow copy, shared grad_
   }
   out.grad_fn = fn;
   return fn;

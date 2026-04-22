@@ -38,6 +38,7 @@ public:
 
     // autograd public methods
     void set_requires_grad(bool val);
+    void ensure_grad(); // pre-allocates grad_ storage so copies share it
     Tensor& grad();
     void backward();
     bool requires_grad = false; // should we track gradient of this tensor

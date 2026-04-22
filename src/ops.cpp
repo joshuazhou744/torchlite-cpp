@@ -85,13 +85,6 @@ Tensor add(const Tensor& a, const Tensor& b) {
   }
 
   if (a.requires_grad || b.requires_grad) {
-    out.requires_grad = true;
-    auto fn = std::make_shared<AddBackward>();
-    fn->inputs = {const_cast<Tensor*>(&a), const_cast<Tensor*>(&b)};
-    out.grad_fn = fn;
-  }
-
-  if (a.requires_grad || b.requires_grad) {
     track<AddBackward>(out, {&a, &b});
   }
   return out;
@@ -138,8 +131,9 @@ Tensor sqrt(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<SqrtBackward>(out, {&input});
-    fn->output_cache = out.contiguous();
+    if (auto fn = track<SqrtBackward>(out, {&input})) {
+      fn->output_cache = out.contiguous();
+    }
   }
 
   return out;
@@ -171,9 +165,10 @@ Tensor mul(const Tensor& a, const Tensor& b) {
   }
 
   if (a.requires_grad || b.requires_grad) {
-    auto fn = track<MulBackward>(out, {&a, &b});
-    fn->a_cache = a.contiguous();
-    fn->b_cache = b.contiguous();
+    if (auto fn = track<MulBackward>(out, {&a, &b})) {
+      fn->a_cache = a.contiguous();
+      fn->b_cache = b.contiguous();
+    }
   }
 
   return out;
@@ -204,9 +199,10 @@ Tensor div(const Tensor& a, const Tensor& b) {
   }
 
   if (a.requires_grad || b.requires_grad) {
-    auto fn = track<DivBackward>(out, {&a, &b});
-    fn->a_cache = a.contiguous();
-    fn->b_cache = b.contiguous();
+    if (auto fn = track<DivBackward>(out, {&a, &b})) {
+      fn->a_cache = a.contiguous();
+      fn->b_cache = b.contiguous();
+    }
   }
 
   return out;
@@ -303,11 +299,12 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
   }
 
   if (a_in.requires_grad || b_in.requires_grad) {
-    auto fn = track<MatmulBackward>(out, {&a_in, &b_in});
-    fn->a_cache = a_in.contiguous();
-    fn->b_cache = b_in.contiguous();
-    fn->squeeze_a = squeeze_a;
-    fn->squeeze_b = squeeze_b;
+    if (auto fn = track<MatmulBackward>(out, {&a_in, &b_in})) {
+      fn->a_cache = a_in.contiguous();
+      fn->b_cache = b_in.contiguous();
+      fn->squeeze_a = squeeze_a;
+      fn->squeeze_b = squeeze_b;
+    }
   }
 
   return out;
@@ -334,9 +331,10 @@ Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1) {
   Tensor out(a.data_, out_sizes, out_strides, a.offset_);
 
   if (a.requires_grad) {
-    auto fn = track<TransposeBackward>(out, {&a});
-    fn->dim0 = dim0;
-    fn->dim1 = dim1;
+    if (auto fn = track<TransposeBackward>(out, {&a})) {
+      fn->dim0 = dim0;
+      fn->dim1 = dim1;
+    }
   }
 
   // use private constructor to create new view
@@ -371,8 +369,9 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
   Tensor out(c.data_, new_sizes, new_strides, c.offset_);
 
   if (a.requires_grad) {
-    auto fn = track<ReshapeBackward>(out, {&a});
-    fn->input_shape = a.sizes();
+    if (auto fn = track<ReshapeBackward>(out, {&a})) {
+      fn->input_shape = a.sizes();
+    }
   }
 
   // create new view using private constructor
@@ -521,8 +520,9 @@ Tensor scale(const Tensor& input, float scalar) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<ScaleBackward>(out, {&input});
-    fn->scalar = scalar;
+    if (auto fn = track<ScaleBackward>(out, {&input})) {
+      fn->scalar = scalar;
+    }
   }
 
   return out;
@@ -575,8 +575,9 @@ Tensor softmax(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<SoftmaxBackward>(out, {&input});
-    fn->output_cache = out.contiguous();
+    if (auto fn = track<SoftmaxBackward>(out, {&input})) {
+      fn->output_cache = out.contiguous();
+    }
   }
 
   return out;
@@ -668,8 +669,9 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<SumBackward>(out, {&input});
-    fn->input_shape = input.sizes();
+    if (auto fn = track<SumBackward>(out, {&input})) {
+      fn->input_shape = input.sizes();
+    }
   }
 
   return out;
@@ -702,7 +704,9 @@ Tensor abs(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    track<AbsBackward>(out, {&input});
+    if (auto fn = track<AbsBackward>(out, {&input})) {
+      fn->input_cache = input.contiguous();
+    }
   }
 
   return out;
@@ -751,8 +755,9 @@ Tensor exp(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<ExpBackward>(out, {&input});
-    fn->output_cache = out.contiguous();
+    if (auto fn = track<ExpBackward>(out, {&input})) {
+      fn->output_cache = out.contiguous();
+    }
   }
 
   return out;
@@ -770,9 +775,10 @@ Tensor pow(const Tensor& input, float x) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<PowBackward>(out, {&input});
-    fn->input_cache = input.contiguous();
-    fn->exponent = x;
+    if (auto fn = track<PowBackward>(out, {&input})) {
+      fn->input_cache = input.contiguous();
+      fn->exponent = x;
+    }
   }
 
   return out;
@@ -790,8 +796,9 @@ Tensor log(const Tensor& input) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<LogBackward>(out, {&input});
-    fn->input_cache = input.contiguous();
+    if (auto fn = track<LogBackward>(out, {&input})) {
+      fn->input_cache = input.contiguous();
+    }
   }
 
   return out;
@@ -809,10 +816,11 @@ Tensor clamp(const Tensor& input, float min_val, float max_val) {
   }
 
   if (input.requires_grad) {
-    auto fn = track<ClampBackward>(out, {&input});
-    fn->input_cache = input.contiguous();
-    fn->min_val = min_val;
-    fn->max_val = max_val;
+    if (auto fn = track<ClampBackward>(out, {&input})) {
+      fn->input_cache = input.contiguous();
+      fn->min_val = min_val;
+      fn->max_val = max_val;
+    }
   }
 
   return out;
