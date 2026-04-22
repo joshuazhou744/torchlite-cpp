@@ -63,21 +63,6 @@ tests/              Test executables
 
 ## Usage Notes
 
-### **FIXED** Autograd: always use named intermediates
-
-When composing multiple operations in expressions that require gradient tracking, assign each intermediate result to a named variable. The graph stores raw pointers to its inputs, so temporaries destroyed at the end of an expression leave dangling pointers that lead to segmentation faults during backpropagation.
-
-```cpp
-// this will seg fault
-Tensor y = add(mul(a, b), c);
-y.backward();
-
-// this is fine
-Tensor prod = mul(a, b);
-Tensor y = add(prod, c);
-y.backward();
-```
-
 ## License
 
 MIT License
