@@ -109,8 +109,10 @@ void test_autograd() {
     b.set_requires_grad(true);
     c.set_requires_grad(true);
 
-    tl::Tensor prod = tl::mul(a, b);
-    tl::Tensor y = tl::add(prod, c);
+    tl::Tensor y = tl::add(tl::mul(a, b), c);
+    // intermediates version
+    // tl::Tensor prod = tl::mul(a, b);
+    // tl::Tensor y = tl::add(prod, c);
     y.backward();
 
     assert(close(a.grad().data()[0], 4.0f));  // b[0]
