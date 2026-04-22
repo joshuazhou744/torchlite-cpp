@@ -322,7 +322,7 @@ Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1) {
   if (dim1 < 0) dim1 += ndim;
 
   if (dim0 < 0 || dim0 >= ndim || dim1 < 0 || dim1 >= ndim) {
-    throw std::invalid_argument("Tranpose: dimension out of range");
+    throw std::invalid_argument("tranpose: dimension out of range");
   }
   auto out_sizes = a.sizes();
   auto out_strides = a.strides();
@@ -348,13 +348,13 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
   int64_t new_numel = 1;
   for (int64_t s: new_sizes) {
     if (s < 0) {
-      throw std::invalid_argument("Reshape: negative dims not allowed");
+      throw std::invalid_argument("reshape: negative dims not allowed");
     }
     new_numel *= s;
   }
 
   if (new_numel != a.numel()) {
-    throw std::invalid_argument("Reshape: new shape must have same number of elements");
+    throw std::invalid_argument("reshape: new shape must have same number of elements");
   }
 
   // make sure tensor is contiguous
@@ -632,7 +632,7 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
   if (dim < 0) dim += ndim; // negative dim wrapping
 
   if (dim < 0 || dim >= ndim) {
-    throw std::invalid_argument("Sum: dimension out of range");
+    throw std::invalid_argument("sum: dimension out of range");
   }
 
   // build output shape
@@ -684,10 +684,28 @@ Tensor mean(const Tensor& input, int64_t dim, bool keepdim) {
   Tensor s = sum(input, dim, keepdim);
   int64_t D = input.sizes()[dim];
   if (D == 0) {
-    throw std::invalid_argument("Mean: cannot reduce a zero-sized dimension");
+    throw std::invalid_argument("mean: cannot reduce a zero-sized dimension");
   }
 
   return scale(s, 1.0f / static_cast<float>(D));
+}
+
+// element-wise absolute value
+Tensor abs(const Tensor& input) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  for (int64_t i = 0; i < a.numel(); ++i) {
+    op[i] = std::abs(ap[i]);
+  }
+
+  if (input.requires_grad) {
+    track<AbsBackward>(out, {&input});
+  }
+
+  return out;
 }
 
 // calculate the variance of a dimension

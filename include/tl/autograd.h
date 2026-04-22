@@ -55,6 +55,12 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class AbsBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
 class ReshapeBackward: public GradFunction {
 public:
   std::vector<int64_t> input_shape;

@@ -259,5 +259,5 @@ void test_autograd() {
 
   }
 
-  std::cout << "Autograd tests passed.\n\n";
+  std::cout << "autograd tests passed.\n";
 }

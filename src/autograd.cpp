@@ -65,6 +65,20 @@ void SumBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], grad);
 }
 
+void AbsBackward::backward(const Tensor& grad_output) {
+  Tensor x = input_cache.contiguous();
+  Tensor g = grad_output.contiguous();
+  Tensor result(x.sizes());
+
+  const float* xp = x.data();
+  const float* gp = g.data();
+  float* rp = result.data();
+  for (int64_t i = 0; i < x.numel(); ++i) {
+    rp[i] = xp[i] > 0.0f ? gp[i] : (xp[i] < 0.0f ? -gp[i]: 0.0f);
+  }
+  accumulate_grad(inputs[0], result);
+}
+
 void ReshapeBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], reshape(grad_output, input_shape));
 }

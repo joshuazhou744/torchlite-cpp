@@ -54,6 +54,9 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim = false);
 // tensor mean along dimension
 Tensor mean(const Tensor& input, int64_t dim, bool keepdim = false);
 
+// tensor absolution value along a dimension
+Tensor abs(const Tensor& input);
+
 // tensor variance along dimension
 Tensor variance(const Tensor& input, int64_t dim, bool keepdim = false);
 
