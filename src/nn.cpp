@@ -177,7 +177,7 @@ std::vector<Tensor*> TransformerEncoderLayer::parameters() {
     auto p = layer.parameters();
     params.insert(params.end(), p.begin(), p.end());
   };
-  append(msa_;
+  append(msa_);
   append(norm1_);
   append(norm2_);
   append(ff1_);
