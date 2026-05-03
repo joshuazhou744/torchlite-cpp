@@ -14,6 +14,8 @@ public:
   void set_weight(const Tensor& w) { weight_ = w; }
   void set_bias(const Tensor& b) { bias_ = b; }
   std::vector<Tensor*> parameters();
+  const Tensor& weight() const { return weight_; }
+  const Tensor& bias() const { return bias_; }
 
 private:
   Tensor weight_; // shape: [out_features, in_features]

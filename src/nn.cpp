@@ -15,13 +15,24 @@ Linear::Linear(int64_t in_features, int64_t out_features, bool use_bias)
   : weight_(randn({out_features, in_features})),
     bias_(use_bias ? randn({out_features}): zeros({out_features})),
     use_bias_(use_bias)
-{}
+{
+  weight_.set_requires_grad(true);
+  bias_.set_requires_grad(true);
+}
+
 Tensor Linear::forward(const Tensor& input) const {
   Tensor out = matmul(input, transpose(weight_, 0, 1)); // xW^T
   if (use_bias_) {
     out = add(out, bias_); // + bias
   }
   return out;
+}
+
+// get Linear layer parameters
+std::vector<Tensor*> Linear::parameters() {
+  std::vector<Tensor*> params = {&weight_};
+  if (use_bias_) params.push_back(&bias_);
+  return params;
 }
 
 // Layer normalization

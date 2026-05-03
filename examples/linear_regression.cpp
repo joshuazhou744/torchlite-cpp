@@ -3,6 +3,7 @@
 #include <tl/optim.h>
 #include <tl/loss.h>
 #include <tl/factory.h>
+#include <tl/nn.h>
 
 #include <iostream>
 #include <cmath>
@@ -23,16 +24,22 @@ int main() {
   }
 
   // params: pred = x @ w + b, w shape (1, 1), b shape (1,)
-  tl::Tensor w = tl::randn({1,1});
-  tl::Tensor b = tl::zeros({1});
-  w.set_requires_grad(true);
-  b.set_requires_grad(true);
+  // tl::Tensor w = tl::randn({1,1});
+  // tl::Tensor b = tl::zeros({1});
+  // w.set_requires_grad(true);
+  // b.set_requires_grad(true);
+  // tl::SGD opt({&w, &b}, 0.3f);
 
-  tl::SGD opt({&w, &b}, 0.3f);
+  // linear layer
+  tl::nn::Linear layer(1, 1);
+  layer.parameters()[0]->set_requires_grad(true); // w
+  layer.parameters()[1]->set_requires_grad(true); // b
+
+  tl::SGD opt(layer.parameters(), 0.3f);
 
   // training loop
   for (int step = 0; step < 1000; ++step) {
-    tl::Tensor pred = tl::add(tl::matmul(x, w), b);
+    tl::Tensor pred = layer.forward(x);
     tl::Tensor loss = tl::mse_loss(pred, y);
 
     opt.zero_grad();
@@ -43,13 +50,14 @@ int main() {
     if (step % 100 == 0) {
       std::cout << "step " << step
         << " loss=" << loss.data()[0]
-        << " w=" << w.data()[0]
-        << " b=" << b.data()[0] << "\n";
+        << " w=" << layer.weight().data()[0]
+        << " b=" << layer.bias().data()[0] << "\n";
     }
   }
 
-  std::cout << "\nfinal:\nw=" << w.data()[0] << " (expected 2.0)\n"
-    << "b=" << b.data()[0] << " (expected 3.0)\n";
+  std::cout << "\nfinal:\n"
+    << "w=" << layer.weight().data()[0] << " (expected 2.0)\n"
+    << "b=" << layer.bias().data()[0] << " (expected 3.0)\n";
 
   return 0;
 }
