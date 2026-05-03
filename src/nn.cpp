@@ -173,14 +173,15 @@ TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_he
 // get Transformer encoder layer parameters (aggregate of msa, norm and feed-forward layers)
 std::vector<Tensor*> TransformerEncoderLayer::parameters() {
   std::vector<Tensor*> params;
-  auto append = [&](const std::vector<Tensor*>& sp) {
-    params.insert(params.end(), sp.begin(), sp.end());
+  auto append = [&](auto& layer) {
+    auto p = layer.parameters();
+    params.insert(params.end(), p.begin(), p.end());
   };
-  append(msa_.parameters());
-  append(norm1_.parameters());
-  append(norm2_.parameters());
-  append(ff1_.parameters());
-  append(ff2_.parameters());
+  append(msa_;
+  append(norm1_);
+  append(norm2_);
+  append(ff1_);
+  append(ff2_);
   return params;
 }
 
