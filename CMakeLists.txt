@@ -34,3 +34,7 @@ add_executable(run_tests
   tests/test_optim.cpp
 )
 target_link_libraries(run_tests PRIVATE torchlite)
+
+# create linear regression example
+add_executable(linear_regression examples/linear_regression.cpp)
+target_link_libraries(linear_regression PRIVATE torchlite)
