@@ -13,6 +13,7 @@ public:
   Tensor forward(const Tensor& input) const;
   void set_weight(const Tensor& w) { weight_ = w; }
   void set_bias(const Tensor& b) { bias_ = b; }
+  std::vector<Tensor*> parameters();
 
 private:
   Tensor weight_; // shape: [out_features, in_features]
