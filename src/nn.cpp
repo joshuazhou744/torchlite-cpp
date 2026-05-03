@@ -41,7 +41,11 @@ LayerNorm::LayerNorm(int64_t normalized_shape, float eps)
     beta_(zeros({normalized_shape})),
     normalized_shape_(normalized_shape),
     eps_(eps)
-{}
+{
+  gamma_.set_requires_grad(true);
+  beta_.set_requires_grad(true);
+}
+
 Tensor LayerNorm::forward(const Tensor& input) const {
   int64_t dim = input.sizes().size() - 1; // get last dim
   Tensor m = mean(input, dim, true);
@@ -54,6 +58,11 @@ Tensor LayerNorm::forward(const Tensor& input) const {
 
   // learnable scale and offset to tune normalization
   return add(mul(normed, gamma_), beta_);
+}
+
+// get LayerNorm parameters
+std::vector<Tensor*> LayerNorm::parameters() {
+  return {&gamma_, &beta_};
 }
 
 // Dropout layer
@@ -93,6 +102,16 @@ MultiHeadAttention::MultiHeadAttention(int64_t d_model, int64_t num_heads)
   if (d_model % num_heads != 0) {
     throw std::invalid_argument("MultiHeadAttention: d_model must be divisible by num_heads");
   }
+}
+
+// get MSA head parameters (aggregate of all linear layer params)
+std::vector<Tensor*> MultiHeadAttention::parameters() {
+  std::vector<Tensor*> params;
+  for (auto* sub: {&q_proj_, &k_proj_, &v_proj_, &out_proj_}) {
+    auto sp = sub->parameters();
+    params.insert(params.end(), sp.begin(), sp.end());
+  }
+  return params;
 }
 
 Tensor MultiHeadAttention::forward(const Tensor& input, const Tensor& mask) const {
@@ -150,6 +169,21 @@ TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_he
     ff2_(d_ff, d_model),
     dropout_(dropout_p)
 {}
+
+// get Transformer encoder layer parameters (aggregate of msa, norm and feed-forward layers)
+std::vector<Tensor*> TransformerEncoderLayer::parameters() {
+  std::vector<Tensor*> params;
+  auto append = [&](const std::vector<Tensor*>& sp) {
+    params.insert(params.end(), sp.begin(), sp.end());
+  };
+  append(msa_.parameters());
+  append(norm1_.parameters());
+  append(norm2_.parameters());
+  append(ff1_.parameters());
+  append(ff2_.parameters());
+  return params;
+}
+
 Tensor TransformerEncoderLayer::forward(const Tensor& input) const {
   // self-attention block with residuals
   Tensor attn_out = msa_.forward(input);
@@ -170,12 +204,24 @@ TransformerEncoder::TransformerEncoder(int64_t d_model, int64_t num_heads, int64
     layers_.emplace_back(d_model, num_heads, d_ff, dropout_p);
   }
 }
+
+
 Tensor TransformerEncoder::forward(const Tensor& input) const {
   Tensor x = input;
   for (const auto& layer: layers_) {
     x = layer.forward(x);
   }
   return x;
+}
+
+// get Transformer encoder parameters (aggregate of all layers)
+std::vector<Tensor*> TransformerEncoder::parameters() {
+  std::vector<Tensor*> params;
+  for (auto& sub: layers_) {
+    auto sp = sub.parameters();
+    params.insert(params.end(), sp.begin(), sp.end());
+  }
+  return params;
 }
 
 // Position encoding

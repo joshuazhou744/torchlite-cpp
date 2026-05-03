@@ -30,6 +30,9 @@ public:
   Tensor forward(const Tensor& input) const;
   void set_gamma(const Tensor& g) { gamma_ = g; }
   void set_beta(const Tensor& b) { beta_ = b; }
+  const Tensor& gamma() const { return gamma_; }
+  const Tensor& beta() const { return beta_; }
+  std::vector<Tensor*> parameters();
 
 private:
   Tensor gamma_; // learnable scale, shape: [normalized_shape]
@@ -59,6 +62,8 @@ public:
   Linear& v_proj() { return v_proj_; }
   Linear& out_proj() { return out_proj_; }
 
+  std::vector<Tensor*> parameters();
+
 private:
   int64_t d_model_; // embedding dimension, hidden dim of output tensor, attention is all you need paper uses d_model, hidden_dim makes more sense to me though
   int64_t num_heads_; // number of attention heads
@@ -82,6 +87,8 @@ public:
   Linear& ff1() { return ff1_; }
   Linear& ff2() { return ff2_; }
 
+  std::vector<Tensor*> parameters();
+
 private:
   MultiHeadAttention msa_;
   LayerNorm norm1_;
@@ -98,6 +105,8 @@ public:
   Tensor forward(const Tensor& input) const;
 
   TransformerEncoderLayer& layer(int64_t i) { return layers_[i]; }
+
+  std::vector<Tensor*> parameters();
 
 private:
   std::vector<TransformerEncoderLayer> layers_;
