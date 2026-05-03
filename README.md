@@ -26,14 +26,14 @@ A lightweight C++ tensor library implementing core PyTorch-like operations for C
 Build the library:
 
 ```bash
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
+mkdir build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
-The **Release** build enables optimizations (`-O3 -match=native -DNDEBUG`):
+The **Release** build enables optimizations (`-O3 march=native -DNDEBUG`):
 - `-O3`: aggressive compiler optimizations
-- `-match=native`: targets CPU specific instruction set
+- `-march=native`: targets CPU specific instruction set
 - `-DNDEBUG`: disables `assert()` calls in hot paths
 
 Run tests:
@@ -49,6 +49,7 @@ include/tl/         Public API headers (tensor, ops, nn, activation, factory, au
 include/external/   Third-party headers (LibrosaCpp)
 src/                Implementation
 tests/              Test executables
+examples/           Example usages of the library
 ```
 
 ## Dependencies
@@ -62,6 +63,18 @@ tests/              Test executables
 - Eigen3 (`sudo apt install libeigen3-dev`)
 
 ## Usage Notes
+
+## Development Start
+
+Build the library:
+
+```bash
+mkdir build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+```
+
+The **Debug** build has no optimizations and enables assert.
 
 ## License
 

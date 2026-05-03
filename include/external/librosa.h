@@ -19,8 +19,10 @@
 #ifndef LIBROSA_H_
 #define LIBROSA_H_
 
-#include "eigen3/Eigen/Core"
-#include "eigen3/unsupported/Eigen/FFT"
+// #include "eigen3/Eigen/Core"
+// #include "eigen3/unsupported/Eigen/FFT"
+#include <Eigen/Core>
+#include <unsupported/Eigen/FFT>
 
 #include <vector>
 #include <complex>
