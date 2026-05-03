@@ -14,6 +14,7 @@ add_library(torchlite
     src/nn.cpp
     src/autograd.cpp
     src/loss.cpp
+    src/optim.cpp
 )
 
 target_include_directories(torchlite
@@ -30,5 +31,6 @@ add_executable(run_tests
   tests/test_nn.cpp
   tests/test_autograd.cpp
   tests/test_loss.cpp
+  tests/test_optim.cpp
 )
 target_link_libraries(run_tests PRIVATE torchlite)

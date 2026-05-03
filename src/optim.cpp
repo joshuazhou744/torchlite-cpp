@@ -1,6 +1,7 @@
 #include <tl/optim.h>
 #include <tl/tensor.h>
 #include <tl/ops.h>
+#include <tl/factory.h>
 
 #include <cstdint>
 #include <cmath>
@@ -8,10 +9,21 @@
 namespace tl {
 
 // Helper functions
+
+// Zero gradients
 void zero_grad(const std::vector<Tensor*>& params) {
   for (Tensor* p: params) {
     if (p->requires_grad) p->grad() = Tensor();
   }
+}
+
+// Update parameters
+static void apply_update(Tensor* p, const Tensor& delta) {
+  // p->data -= delta
+  Tensor d = delta.contiguous();
+  float* pd = p->data();
+  const float* dd = d.data();
+  for (int64_t i = 0; i < p->numel(); ++i) pd[i] = dd[i];
 }
 
 // SGD: Stochastic gradient descent with L2 regularization (weight decay)
@@ -44,13 +56,14 @@ void SGD::step() {
       if (it == velocity_.end()) {
         velocity_[p] = g; // first step, v = g
       } else {
-        velocity_[p] = add(scale(it->second, momentum_), g);
+        Tensor old_v = it->second;
+        velocity_[p] = add(scale(old_v, momentum_), g);
       }
       g = velocity_[p];
     }
 
     // w' = w - lr * g
-    *p = sub(*p, scale(g, lr_));
+    apply_update(p, scale(g, lr_));
   }
 }
 
@@ -101,7 +114,8 @@ void Adam::step() {
     if (m_it == m_.end()) {
       m_[p] = scale(g, 1.0f - beta1_);
     } else {
-      m_[p] = add(scale(m_it->second, beta1_), scale(g, 1.0f - beta1_));
+      Tensor old_m = m_it->second;
+      m_[p] = add(scale(old_m, beta1_), scale(g, 1.0f - beta1_));
     }
 
     Tensor g_sq = mul(g, g);
@@ -109,7 +123,8 @@ void Adam::step() {
     if (v_it == v_.end()) {
       v_[p] = scale(g_sq, 1.0f - beta2_);
     } else {
-      v_[p] = add(scale(v_it->second, beta2_), scale(g_sq, 1.0f - beta2_));
+      Tensor old_v = v_it->second;
+      v_[p] = add(scale(old_v, beta2_), scale(g_sq, 1.0f - beta2_));
     }
 
     // bias correction: early steps underestimate moments (starting at 0), so we rescale
@@ -122,7 +137,8 @@ void Adam::step() {
     // dividing by sqrt(v_hat) shrinks the step for params with large/noisy gradients
     Tensor denom = add(sqrt(v_hat), full(v_hat.sizes(), eps_));
     Tensor update = div(m_hat, denom);
-    *p = sub(*p, scale(update, lr_));
+
+    apply_update(p, scale(g, lr_));
   }
 }
 
@@ -162,7 +178,8 @@ void AdamW::step() {
     if (m_it == m_.end()) {
       m_[p] = scale(g, 1.0f - beta1_);
     } else {
-      m_[p] = add(scale(m_it->second, beta1_), scale(g, 1.0f - beta1_));
+      Tensor old_m = m_it->second;
+      m_[p] = add(scale(old_m, beta1_), scale(g, 1.0f - beta1_));
     }
 
     Tensor g_sq = mul(g, g);
@@ -184,7 +201,8 @@ void AdamW::step() {
     // dividing by sqrt(v_hat) shrinks the step for params with large/noisy gradients
     Tensor denom = add(sqrt(v_hat), full(v_hat.sizes(), eps_));
     Tensor adam_update = div(m_hat, denom);
-    *p = sub(*p, scale(add(adam_update, scale(*p, weight_decay_)), lr_));
+
+    apply_update(p, scale(add(adam_update, scale(*p, weight_decay_)), lr_));
   }
 }
 
