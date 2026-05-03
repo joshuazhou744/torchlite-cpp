@@ -260,6 +260,21 @@ void MatmulBackward::backward(const Tensor& grad_output) {
   // if (squeeze_a) grad = reshape(grad, {1, grad.sizes()[0]});
   // if (squeeze_b) grad = reshape(grad, {grad.sizes()[0], 1});
 
+  // grad_output comes squeezed, unsqueeze it
+  Tensor grad = grad_output;
+  if (squeeze_a) {
+    // (..., N) -> (..., 1, N)
+    auto s = std::vector<int64_t>(grad.sizes().begin(), grad.sizes().end());
+    s.insert(s.end() - 1, 1);
+    grad = reshape(grad, s);
+  }
+  if (squeeze_b) {
+    // (..., M) -> (..., M, 1)
+    auto s = std::vector<int64_t>(grad.sizes().begin(), grad.sizes().end());
+    s.push_back(1);
+    grad = reshape(grad, s);
+  }
+
   // reverse squeeze handling
   Tensor a = squeeze_a ? reshape(a_cache, {1, a_cache.sizes()[0]}) : a_cache;
   Tensor b = squeeze_b ? reshape(b_cache, {b_cache.sizes()[0], 1}) : b_cache;
@@ -269,8 +284,12 @@ void MatmulBackward::backward(const Tensor& grad_output) {
   Tensor bt = transpose(b, -2, -1);
 
   // compute derivatives with batch handling
-  Tensor da = sum_to(matmul(grad_output, bt), a_cache.sizes());
-  Tensor db = sum_to(matmul(at, grad_output), b_cache.sizes());
+  Tensor da = sum_to(matmul(grad, bt), a.sizes());
+  Tensor db = sum_to(matmul(at, grad), b.sizes());
+
+  // reverse unsqueeze so grads match cached input sizes
+  if (squeeze_a) da = reshape(da, a_cache.sizes());
+  if (squeeze_b) db = reshape(db, b_cache.sizes());
 
   // accumulate gradients
   accumulate_grad(inputs[0], da);

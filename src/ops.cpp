@@ -285,21 +285,21 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     }
   }
 
-
+  Tensor result = out;
   if (squeeze_a && squeeze_b) { // both squeezed
-    return reshape(out, {}); // [1, K] @ [K, 1] -> [1, 1] -> scalar
+    result = reshape(out, {}); // [1, K] @ [K, 1] -> [1, 1] -> scalar
   } else if (squeeze_a) { // only first input matrix squeezed
     std::vector<int64_t> s(out.sizes().begin(), out.sizes().end());
     s.erase(s.end() - 2); // [..., 1, N] @ [..., N] remove fake row dim
-    return reshape(out, s);
+    result = reshape(out, s);
   } else if (squeeze_b) { // only second input matrix squeezed
     std::vector<int64_t> s(out.sizes().begin(), out.sizes().end());
     s.erase(s.end() - 1); // [..., M, 1] @ [..., M], remove fake col dim
-    return reshape(out, s);
+    result = reshape(out, s);
   }
 
   if (a_in.requires_grad || b_in.requires_grad) {
-    if (auto fn = track<MatmulBackward>(out, {&a_in, &b_in})) {
+    if (auto fn = track<MatmulBackward>(result, {&a_in, &b_in})) {
       fn->a_cache = a_in.contiguous();
       fn->b_cache = b_in.contiguous();
       fn->squeeze_a = squeeze_a;
@@ -307,7 +307,7 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     }
   }
 
-  return out;
+  return result;
 }
 
 // matrix transpose

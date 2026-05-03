@@ -23,7 +23,7 @@ static void apply_update(Tensor* p, const Tensor& delta) {
   Tensor d = delta.contiguous();
   float* pd = p->data();
   const float* dd = d.data();
-  for (int64_t i = 0; i < p->numel(); ++i) pd[i] = dd[i];
+  for (int64_t i = 0; i < p->numel(); ++i) pd[i] -= dd[i];
 }
 
 // SGD: Stochastic gradient descent with L2 regularization (weight decay)
@@ -138,7 +138,7 @@ void Adam::step() {
     Tensor denom = add(sqrt(v_hat), full(v_hat.sizes(), eps_));
     Tensor update = div(m_hat, denom);
 
-    apply_update(p, scale(g, lr_));
+    apply_update(p, scale(update, lr_));
   }
 }
 
