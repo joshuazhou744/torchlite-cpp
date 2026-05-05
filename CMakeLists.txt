@@ -55,3 +55,7 @@ endif()
 # create linear regression example
 add_executable(linear_regression examples/linear_regression.cpp)
 target_link_libraries(linear_regression PRIVATE torchlite)
+
+# create spiral mlp example
+add_executable(spiral_mlp examples/spiral_mlp.cpp)
+target_link_libraries(spiral_mlp PRIVATE torchlite)
