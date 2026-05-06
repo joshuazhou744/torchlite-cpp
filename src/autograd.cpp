@@ -28,13 +28,13 @@ static Tensor sum_to(Tensor grad, const std::vector<int64_t>& target_shape) {
 // Backward functions
 
 void AddBackward::backward(const Tensor& grad_output) {
-  accumulate_grad(inputs[0], grad_output);
-  accumulate_grad(inputs[1], grad_output);
+  accumulate_grad(inputs[0], sum_to(grad_output, inputs[0].sizes()));
+  accumulate_grad(inputs[1], sum_to(grad_output, inputs[1].sizes()));
 }
 
 void SubBackward::backward(const Tensor& grad_output) {
-  accumulate_grad(inputs[0], grad_output);
-  accumulate_grad(inputs[1], neg(grad_output));
+  accumulate_grad(inputs[0], sum_to(grad_output, inputs[0].sizes()));
+  accumulate_grad(inputs[1], neg(sum_to(grad_output, inputs[1].sizes())));
 }
 
 void NegBackward::backward(const Tensor& grad_output) {
