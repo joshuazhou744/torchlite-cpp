@@ -12,8 +12,8 @@ namespace nn {
 
 // Linear layer
 Linear::Linear(int64_t in_features, int64_t out_features, bool use_bias)
-  : weight_(randn({out_features, in_features})),
-    bias_(use_bias ? randn({out_features}): zeros({out_features})),
+  : weight_(scale(randn({out_features, in_features}), std::sqrt(2.0f / in_features))),
+    bias_(zeros({out_features})),
     use_bias_(use_bias)
 {
   weight_.set_requires_grad(true);

@@ -46,10 +46,10 @@ int main() {
   std::cout << "train: " << x_train.sizes()[0] << " point64_ts\n";
   std::cout << "test: " << x_test.sizes()[0] << " point64_ts\n";
 
-  std::cout << "first 4 x-values of arm 0:\n";
-  for (int64_t i = 0; i < 4; ++i) {
-    std::cout << " x=(" << x_train.data()[i*2] << ", " << x_train.data()[i*2+1] << ") label=" << y_train[i] << "\n";
-  }
+  // std::cout << "first 4 x-values of arm 0:\n";
+  // for (int64_t i = 0; i < 4; ++i) {
+  //   std::cout << " x=(" << x_train.data()[i*2] << ", " << x_train.data()[i*2+1] << ") label=" << y_train[i] << "\n";
+  // }
 
   tl::nn::Linear l1(2, 16); // project 2 input features (x, y) to hidden dim of 16
   tl::nn::Linear l2(16, 16); // hidden layer -> hidden layer
@@ -60,10 +60,10 @@ int main() {
   for (auto *p: l2.parameters()) params.push_back(p);
   for (auto *p: l3.parameters()) params.push_back(p);
 
-  tl::Adam opt(params, 0.01f);
+  tl::Adam opt(params, 0.003f);
 
   // training loop
-  for (int64_t step = 0; step < 1000; ++step) {
+  for (int64_t step = 0; step < 2000; ++step) {
     tl::Tensor h1 = tl::relu(l1.forward(x_train)); // activation after first layer
     tl::Tensor h2 = tl::relu(l2.forward(h1)); // activation after second layer
     tl::Tensor logits = l3.forward(h2); // classification head
