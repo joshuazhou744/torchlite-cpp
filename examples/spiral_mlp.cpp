@@ -37,33 +37,33 @@ int main() {
 
   tl::Tensor x_train;
   std::vector<int> y_train;
-  create_spiral(x_train, y_train, 100, rng);
+  create_spiral(x_train, y_train, 200, rng);
 
   tl::Tensor x_test;
   std::vector<int> y_test;
   create_spiral(x_test, y_test, 50, rng);
 
-  std::cout << "train: " << x_train.sizes()[0] << " point64_ts\n";
-  std::cout << "test: " << x_test.sizes()[0] << " point64_ts\n";
+  std::cout << "train: " << x_train.sizes()[0] << " points\n";
+  std::cout << "test: " << x_test.sizes()[0] << " points\n";
 
   // std::cout << "first 4 x-values of arm 0:\n";
   // for (int64_t i = 0; i < 4; ++i) {
   //   std::cout << " x=(" << x_train.data()[i*2] << ", " << x_train.data()[i*2+1] << ") label=" << y_train[i] << "\n";
   // }
 
-  tl::nn::Linear l1(2, 16); // project 2 input features (x, y) to hidden dim of 16
-  tl::nn::Linear l2(16, 16); // hidden layer -> hidden layer
-  tl::nn::Linear l3(16, 2); // project hidden dim back to 2 class logits (classification head)
+  tl::nn::Linear l1(2, 32); // project 2 input features (x, y) to hidden dim of 16
+  tl::nn::Linear l2(32, 32); // hidden layer -> hidden layer
+  tl::nn::Linear l3(32, 2); // project hidden dim back to 2 class logits (classification head)
 
   std::vector<tl::Tensor*> params;
   for (auto *p: l1.parameters()) params.push_back(p);
   for (auto *p: l2.parameters()) params.push_back(p);
   for (auto *p: l3.parameters()) params.push_back(p);
 
-  tl::Adam opt(params, 0.003f);
+  tl::Adam opt(params, 0.005f);
 
   // training loop
-  for (int64_t step = 0; step < 2000; ++step) {
+  for (int64_t step = 0; step < 3000; ++step) {
     tl::Tensor h1 = tl::relu(l1.forward(x_train)); // activation after first layer
     tl::Tensor h2 = tl::relu(l2.forward(h1)); // activation after second layer
     tl::Tensor logits = l3.forward(h2); // classification head
@@ -79,6 +79,19 @@ int main() {
 
   }
 
+  // training accuracy
+  // overfit check
+  {
+      tl::Tensor h1 = tl::relu(l1.forward(x_train));
+      tl::Tensor h2 = tl::relu(l2.forward(h1));
+      tl::Tensor logits = l3.forward(h2);
+      int64_t correct = 0;
+      for (int64_t i = 0; i < (int64_t)y_train.size(); ++i) {
+          float s0 = logits.data()[i*2], s1 = logits.data()[i*2+1];
+          if (((s1 > s0) ? 1 : 0) == y_train[i]) ++correct;
+      }
+      std::cout << "train accuracy: " << correct << "/" << y_train.size() << "\n";
+  }
 
   // evaluate on test step (inference only, no loss)
   {
