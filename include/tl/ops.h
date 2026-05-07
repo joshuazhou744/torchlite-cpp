@@ -75,6 +75,10 @@ Tensor pow(const Tensor& input, float x);
 // unary clamp: out[i] = max(min_val, min(max_val, in[i]))
 Tensor clamp(const Tensor& input, float min_val, float max_val);
 
-// pad a tensor along a dimension to a target length using a given value
+// pad: add values to a tensor along a dimension to a target length using a given value
 Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value = 0.0f);
+
+// conv2d: slide (C_out, C_in, kH, kW) filters (kernel) over (N, C_in, H, W) input to produce (N, C_out, H_out, W_out)
+Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride = 1, int64_t padding = 0);
+
 }

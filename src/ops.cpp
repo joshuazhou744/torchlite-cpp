@@ -860,4 +860,82 @@ Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value) {
   return out;
 }
 
+// convolution of a filter tensor over an input tensor using im2col (unroll inputs into one big matmul)
+Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride, int64_t padding) {
+  const int64_t N = input.sizes()[0];
+  const int64_t C_in = input.sizes()[1];
+  const int64_t H = input.sizes()[2];
+  const int64_t W = input.sizes()[3];
+
+  const int64_t C_out = weight.sizes()[0];
+  const int64_t kH = weight.sizes()[2];
+  const int64_t kW = weight.sizes()[3];
+
+  // remove edge pixels with padding in consideration
+  const int64_t H_out = (H + 2 * padding - kH) / stride + 1;
+  const int64_t W_out = (W + 2 * padding - kW) / stride + 1;
+
+  // im2col: (N, C_in * kH * kW, H_out * W_out)
+  Tensor col({N, C_in * kH * kW, H_out * W_out});
+  // col tensor data that we'll use to weight @ col -> (C_out, H_out * W_out)
+  // holds every input patch (flattened)
+  float* cp = col.data();
+  const float* ip = input.data();
+
+  for (int64_t n = 0; n < N; ++n) { // iterate over images in a batch
+    for (int64_t c = 0; c < C_in; ++c) { // iterate over each input channel
+      for (int64_t kh = 0; kh < kH; ++kh) { // iterate over each kernel row
+        for (int64_t kw = 0; kw < kW; ++kw) { // iterate over each kernel col
+          for (int64_t oh = 0; oh < H_out; ++oh) { // iterate over output height
+            for (int64_t ow = 0; ow < W_out; ++ow) { // iterate over output width
+              // map output pixels to input pixel
+              int64_t ih = oh * stride - padding + kh;
+              int64_t iw = ow * stride - padding + kw;
+
+              // write to the col matrix
+              int64_t col_row = c * kH * kW + kh * kW + kw;
+              int64_t col_col = oh * W_out + ow;
+
+              // flat index into col
+              int64_t col_i = n*(C_in*kH*kW*H_out*W_out) + col_row*(H_out*W_out) + col_col;
+
+              if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
+                cp[col_i] = 0.0f; // padding
+              } else {
+                int64_t in_i = n*(C_in*H*W) + c*(H*W) + ih*W + iw;
+                cp[col_i] = ip[in_i]; // get input value
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // weight: (C_out, C_in, kH, kW)
+  // col: (N, C_in * kH * kW, H_out * W_out)
+  Tensor w = reshape(weight, {C_out, C_in*kH*kW});
+  Tensor out({N, C_out, H_out*W_out});
+
+  // matmul per image: w @ col[n] -> (C_out, H_out * W_out)
+  for (int64_t n = 0; n < N; ++n) {
+    Tensor col_n = reshape(slice(col, 0, n, n+1), {C_in*kH*kW, H_out*W_out});
+    Tensor out_n = matmul(w, col_n);
+    // copy into out[n]
+    float* op = out.data() + n * C_out * H_out * W_out; // offset to the nth image
+    const float* onp = out_n.data();
+    for (int64_t i = 0; i < C_out * H_out * W_out; ++i) op[i] = onp[i];
+  }
+
+  Tensor result = reshape(out, {N, C_out, H_out, W_out});
+
+  // add bias
+  if (!bias.empty()) {
+    result = add(result, reshape(bias, {1, C_out, 1, 1}));
+  }
+
+  return result;
+}
+
+
 }
