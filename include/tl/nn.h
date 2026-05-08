@@ -23,6 +23,23 @@ private:
   bool use_bias_;
 };
 
+// Conv2d layer: slide C_out filters of shape (C_in, kH, kW) over (N, C_in, H, W) input
+// square kernels only for simplicity
+class Conv2d {
+public:
+  Conv2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride = 1, int64_t padding = 0, bool use_bias = true);
+  Tensor forward(const Tensor& input) const;
+  std::vector<Tensor*> parameters();
+  const Tensor& weight() const { return weight_; }
+  const Tensor& bias() const { return bias_; }
+
+private:
+  Tensor weight_; // (out_channels, in_channels, kernel_size, kernel_size)
+  Tensor bias_; // (out_channels,)
+  int64_t stride_, padding_;
+  bool use_bias_;
+};
+
 // Layer normalization: normalize across last dimension
 class LayerNorm {
 public:
