@@ -297,4 +297,76 @@ void MatmulBackward::backward(const Tensor& grad_output) {
 }
 
 
+// flipped convolution (backward of convolution is another convolution)
+void Conv2dBackward::backward(const Tensor& grad_output) {
+  const int64_t C_out = grad_output.sizes()[1];
+  const int64_t H_out = grad_output.sizes()[2];
+  const int64_t W_out = grad_output.sizes()[3];
+  const int64_t kH = weight_cache.sizes()[2];
+  const int64_t kW = weight_cache.sizes()[3];
+  const int64_t CkHkW = C_in * kH * kW;
+
+  Tensor go = grad_output.contiguous();
+  const float* gop = go.data();
+
+  Tensor w = reshape(weight_cache, {C_out, CkHkW});
+  Tensor grad_w = zeros({C_out, CkHkW});
+  Tensor grad_input = zeros({N, C_in, H, W});
+  Tensor grad_bias = zeros({C_out});
+
+  float* gi = grad_input.data();
+  float* gb = grad_bias.data();
+
+  for (int64_t n = 0; n < N; ++n) {
+    // grad_out_n: (C_out, H_out*W_out)
+    Tensor grad_out_n = reshape(slice(go, 0, n, n+1), {C_out, H_out*W_out});
+    // col_n: (CkHkW, H_out*W_out)
+    Tensor col_n = reshape(slice(col_cache, 0, n, n+1), {CkHkW, H_out*W_out});
+    // grad_weight += grad_out_n @ col_n.T
+    grad_w = add(grad_w, matmul(grad_out_n, transpose(col_n, 0, 1)));
+    // grad_col_n = w.T @ grad_out_n: (CkHkW, H_out*W_out)
+    Tensor grad_col_n = matmul(transpose(w, 0, 1), grad_out_n);
+    const float* gcp = grad_col_n.data();
+
+    // col2im: scatter grad_col_n back to grad_input
+    for (int64_t c = 0; c < C_in; ++c) {
+      for (int64_t kh = 0; kh < kH; ++kh) {
+        for (int64_t kw = 0; kw < kW; ++kw) {
+          for (int64_t oh = 0; oh < H_out; ++oh) {
+            for (int64_t ow = 0; ow < W_out; ++ow) {
+              int64_t ih = oh * stride - padding + kh;
+              int64_t iw = ow * stride - padding + kw;
+              if (ih < 0 || ih >= H || iw < 0 || iw >= W) continue; // out of bounds
+
+              int64_t col_row = c * kH * kW + kh * kW + kw;
+              int64_t col_col = oh * W_out + ow;
+              int64_t col_i = col_row * (H_out * W_out) + col_col;
+              int64_t in_i = n * (C_in * H * W) + c * (H * W) + ih * W + iw;
+
+              gi[in_i] += gcp[col_i];
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // grad_bias: sum grad_output over N, H_out, W_out
+  for (int64_t n = 0; n < N; ++n) {
+    for (int64_t c = 0; c < C_out; ++c) {
+      for (int64_t oh = 0; oh < H_out; ++oh) {
+        for (int64_t ow = 0; ow < W_out; ++ow) {
+          gb[c] += gop[n*(C_out*H_out*W_out) + c*(H_out*W_out) + oh*W_out + ow];
+        }
+      }
+    }
+  }
+
+
+  accumulate_grad(inputs[0], grad_input);
+  accumulate_grad(inputs[1], reshape(grad_w, weight_cache.sizes()));
+  if (inputs.size() > 2) accumulate_grad(inputs[2], grad_bias);
+}
+
+
 } // tl

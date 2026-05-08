@@ -934,6 +934,19 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
     result = add(result, reshape(bias, {1, C_out, 1, 1}));
   }
 
+  if (input.requires_grad || weight.requires_grad) {
+    if (auto fn = track<Conv2dBackward>(result, {&input, &weight, &bias})) {
+      fn->weight_cache = weight.contiguous();
+      fn->col_cache = col;
+      fn->stride = stride;
+      fn->padding = padding;
+      fn->N = N;
+      fn->C_in = C_in;
+      fn->H = H;
+      fn->W = W;
+    }
+  }
+
   return result;
 }
 
