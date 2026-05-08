@@ -293,5 +293,35 @@ void test_ops() {
   assert(slice_out.data()[2] == 6.0f);
   assert(slice_out.data()[3] == 7.0f);
 
+  // test conv2d: (1,1,4,4) input, (1,1,3,3) all-ones kernel, stride=1, padding=0
+  // output shape should be (1,1,2,2)
+  // each output value = sum of 3x3 patch
+  // input:
+  //  1  2  3  4
+  //  5  6  7  8
+  //  9 10 11 12
+  // 13 14 15 16
+  // patch at (0,0): 1+2+3+5+6+7+9+10+11 = 54
+  // patch at (0,1): 2+3+4+6+7+8+10+11+12 = 63
+  // patch at (1,0): 5+6+7+9+10+11+13+14+15 = 90
+  // patch at (1,1): 6+7+8+10+11+12+14+15+16 = 99
+  tl::Tensor conv_in({1, 1, 4, 4});
+  for (int i = 0; i < 16; ++i) conv_in.data()[i] = (float)(i + 1);
+
+  tl::Tensor conv_w({1, 1, 3, 3});
+  for (int i = 0; i < 9; ++i) conv_w.data()[i] = 1.0f;
+
+  tl::Tensor conv_bias; // empty — no bias
+  tl::Tensor conv_out = tl::conv2d(conv_in, conv_w, conv_bias, 1, 0);
+
+  assert(conv_out.sizes()[0] == 1);
+  assert(conv_out.sizes()[1] == 1);
+  assert(conv_out.sizes()[2] == 2);
+  assert(conv_out.sizes()[3] == 2);
+  assert(is_close(conv_out.data()[0], 54.0f));
+  assert(is_close(conv_out.data()[1], 63.0f));
+  assert(is_close(conv_out.data()[2], 90.0f));
+  assert(is_close(conv_out.data()[3], 99.0f));
+
   std::cout << "ops tests passed" << std::endl;
 }
