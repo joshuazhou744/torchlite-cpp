@@ -59,3 +59,7 @@ target_link_libraries(linear_regression PRIVATE torchlite)
 # create spiral mlp example
 add_executable(spiral_mlp examples/spiral_mlp.cpp)
 target_link_libraries(spiral_mlp PRIVATE torchlite)
+
+# create pattern cnn example
+add_executable(pattern_cnn examples/pattern_cnn.cpp)
+target_link_libraries(pattern_cnn PRIVATE torchlite)
