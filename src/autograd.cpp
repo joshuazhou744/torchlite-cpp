@@ -4,6 +4,8 @@
 
 #include <cstdint>
 #include <cmath>
+#include <unordered_set>
+#include <vector>
 
 namespace tl {
 
@@ -22,6 +24,33 @@ static Tensor sum_to(Tensor grad, const std::vector<int64_t>& target_shape) {
     grad = sum(grad, 0, false);
   }
   return grad;
+}
+
+// Graph utility
+
+void release_graph(Tensor& root) {
+  if (!root.grad_fn) return;
+
+  std::vector<std::shared_ptr<GradFunction>> stack;
+  std::unordered_set<GradFunction*> visited;
+
+  stack.push_back(root.grad_fn);
+  visited.insert(root.grad_fn.get()); // track raw grad function pointer
+
+  while (!stack.empty()) {
+    auto fn = stack.back();
+    stack.pop_back();
+
+    for (auto& input: fn->inputs) {
+      if (input.grad_fn && !visited.count(input.grad_fn.get())) {
+        visited.insert(input.grad_fn.get());
+        stack.push_back(input.grad_fn);
+      }
+      input.grad_fn = nullptr;
+    }
+  }
+
+  root.grad_fn = nullptr;
 }
 
 

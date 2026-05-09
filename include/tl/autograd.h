@@ -11,6 +11,9 @@ namespace tl {
 
 inline bool& grad_enabled() { static bool e = true; return e; }
 
+// traverse computation graph and clear all grad function pointers to save memory
+void release_graph(Tensor& root);
+
 struct NoGradGuard {
   NoGradGuard() { grad_enabled() = false; }
   ~NoGradGuard() { grad_enabled() = true; }
