@@ -5,26 +5,29 @@
 #include <tl/loss.h>
 #include <tl/optim.h>
 #include <tl/factory.h>
+#include <tl/autograd.h>
 
 #include <iostream>
 #include <vector>
 #include <random>
 #include <cmath>
-
+#include <string>
 
 // generate N samples of 8x8 stripe images
 // horizontal stripes: class 0
 // vertical stripes: class 1
+// diagonal stripes: class 2
+// checkerboard: class 3
 // x: (N, 1, 8, 8), labels: (N,)
 void create_patterns(tl::Tensor& x, std::vector<int>& labels, int n_per_class, std::mt19937& rng) {
-  int N = n_per_class * 2;
+  int N = n_per_class * 4;
   x = tl::zeros({N, 1, 8, 8});
   labels.resize(N);
 
   std::uniform_int_distribution<int> period_dist(2, 4);
-  std::normal_distribution<float> noise(0.0f, 0.1f);
+  std::normal_distribution<float> noise(0.0f, 0.2f);
 
-  for (int c = 0; c < 2; ++c) {
+  for (int c = 0; c < 4; ++c) {
     for (int i = 0; i < n_per_class; ++i) {
       int index = c * n_per_class + i; // index of each pattern in x
       labels[index] = c; // class label
@@ -33,9 +36,16 @@ void create_patterns(tl::Tensor& x, std::vector<int>& labels, int n_per_class, s
       for (int h = 0; h < 8; ++h) {
         for (int w = 0; w < 8; ++w) {
           // each period is (period/2) bright, followed by (period/2) dark stripes
-          float val = (c == 0)
-            ? (h % period < period / 2 ? 1.0f : 0.0f) // horizontal: vary by row
-            : (w % period < period / 2 ? 1.0f : 0.0f); // vertical: vary by col
+          float val = 0.0f;
+          if (c == 0) {
+            val = (h % period < period / 2 ? 1.0f : 0.0f); // horizontal: vary by row
+          } else if (c == 1) {
+            val = (w % period < period / 2 ? 1.0f : 0.0f); // vertical: vary by col
+          } else if (c == 2) {
+            val = ((h + w) % period < period / 2 ? 1.0f : 0.0f); // diagonal
+          } else {
+            val = ((h + w) % 2 == 0 ? 1.0f : 0.0f); // checkerboard
+          }
           val += noise(rng); // add noise
           x.data()[index * 64 + h * 8 + w] = val; // write to the flat data of x
         }
@@ -67,7 +77,7 @@ int main() {
   // cnn
   tl::nn::Conv2d conv1(1, 8, 3, 1, 1); // (N, 1, 8, 8) -> (N, 8, 8, 8)
   tl::nn::Conv2d conv2(8, 16, 3, 1, 1); // (N, 8, 8, 8) -> (N, 16, 8, 8)
-  tl::nn::Linear fc(16 * 8 * 8, 2); // fully connected classification head
+  tl::nn::Linear fc(16 * 8 * 8, 4); // fully connected classification head
 
   // extract params from cnn
   std::vector<tl::Tensor*> params;
@@ -96,16 +106,33 @@ int main() {
     opt.zero_grad();
     loss.backward();
     opt.step();
+    tl::release_graph(loss);
 
     if (step % 100 == 0) {
         std::cout << "step " << step << " loss: " << loss.data()[0] << "\n";
     }
   }
 
-
-
   // eval
+  auto eval = [&](const tl::Tensor& x, const std::vector<int>& y, const std::string& split) {
+    tl::Tensor o1 = tl::relu(conv1.forward(x));
+    tl::Tensor o2 = tl::relu(conv2.forward(o1));
+    tl::Tensor fl = tl::reshape(o2, {o2.sizes()[0], 16 * 8 * 8});
+    tl::Tensor logits = fc.forward(fl);
 
+    int correct = 0;
+    for (int i = 0; i < (int)y.size(); ++i) {
+      int pred = 0;
+      for (int k = 1; k < 4; ++k) {
+        if (logits.data()[i * 4 + k] > logits.data()[i * 4 + pred]) pred = k;
+      }
+      if (pred == y[i]) ++correct;
+    }
+    std::cout << split << " accuracy: " << correct << "/" << y.size() << "\n";
+  };
+
+  eval(x_train, y_train, "train");
+  eval(x_test, y_test, "test");
 
   return 0;
 }
