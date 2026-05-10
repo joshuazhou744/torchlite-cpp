@@ -78,26 +78,30 @@ int main() {
   tl::nn::Conv2d conv1(1, 8, 3, 1, 1); // (N, 1, 8, 8) -> (N, 8, 8, 8)
   tl::nn::Conv2d conv2(8, 16, 3, 1, 1); // (N, 8, 8, 8) -> (N, 16, 8, 8)
   tl::nn::Linear fc(16 * 8 * 8, 4); // fully connected classification head
+  tl::nn::ReLU r1, r2;
+  tl::nn::Flatten flat;
+  tl::nn::Sequential model({&conv1, &r1, &conv2, &r2, &flat, &fc});
 
   // extract params from cnn
-  std::vector<tl::Tensor*> params;
-  auto p1 = conv1.parameters();
-  auto p2 = conv2.parameters();
-  auto p3 = fc.parameters();
-  params.insert(params.end(), p1.begin(), p1.end());
-  params.insert(params.end(), p2.begin(), p2.end());
-  params.insert(params.end(), p3.begin(), p3.end());
+  // std::vector<tl::Tensor*> params;
+  // auto p1 = conv1.parameters();
+  // auto p2 = conv2.parameters();
+  // auto p3 = fc.parameters();
+  // params.insert(params.end(), p1.begin(), p1.end());
+  // params.insert(params.end(), p2.begin(), p2.end());
+  // params.insert(params.end(), p3.begin(), p3.end());
 
   // optim
-  tl::Adam opt(params, 0.0001f);
+  tl::Adam opt(model.parameters(), 0.0001f);
 
   // training loop
   for (int step = 0; step < 500; ++step) {
     // forward pass
-    tl::Tensor out1 = tl::relu(conv1.forward(x_train));
-    tl::Tensor out2 = tl::relu(conv2.forward(out1));
-    tl::Tensor flat = tl::reshape(out2, {out2.sizes()[0], 16 * 8 * 8});
-    tl::Tensor logits = fc.forward(flat);
+    // tl::Tensor out1 = tl::relu(conv1.forward(x_train));
+    // tl::Tensor out2 = tl::relu(conv2.forward(out1));
+    // tl::Tensor flat = tl::reshape(out2, {out2.sizes()[0], 16 * 8 * 8});
+    // tl::Tensor logits = fc.forward(flat);
+    tl::Tensor logits = model.forward(x_train);
 
     // loss function
     tl::Tensor loss = tl::cross_entropy_loss(logits, y_train);
@@ -115,10 +119,11 @@ int main() {
 
   // eval
   auto eval = [&](const tl::Tensor& x, const std::vector<int>& y, const std::string& split) {
-    tl::Tensor o1 = tl::relu(conv1.forward(x));
-    tl::Tensor o2 = tl::relu(conv2.forward(o1));
-    tl::Tensor fl = tl::reshape(o2, {o2.sizes()[0], 16 * 8 * 8});
-    tl::Tensor logits = fc.forward(fl);
+    // tl::Tensor o1 = tl::relu(conv1.forward(x));
+    // tl::Tensor o2 = tl::relu(conv2.forward(o1));
+    // tl::Tensor fl = tl::reshape(o2, {o2.sizes()[0], 16 * 8 * 8});
+    // tl::Tensor logits = fc.forward(fl);
+    tl::Tensor logits = model.forward(x);
 
     int correct = 0;
     for (int i = 0; i < (int)y.size(); ++i) {
