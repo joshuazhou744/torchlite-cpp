@@ -54,19 +54,24 @@ int main() {
   tl::nn::Linear l1(2, 32); // project 2 input features (x, y) to hidden dim of 16
   tl::nn::Linear l2(32, 32); // hidden layer -> hidden layer
   tl::nn::Linear l3(32, 2); // project hidden dim back to 2 class logits (classification head)
+  tl::nn::ReLU r1, r2; // ReLU module
 
-  std::vector<tl::Tensor*> params;
-  for (auto *p: l1.parameters()) params.push_back(p);
-  for (auto *p: l2.parameters()) params.push_back(p);
-  for (auto *p: l3.parameters()) params.push_back(p);
+  tl::nn::Sequential model({&l1, &r1, &l2, &r2, &l3});
 
-  tl::Adam opt(params, 0.005f);
+  // manual parameter aggregation (use when no Sequential or Module)
+  // std::vector<tl::Tensor*> params;
+  // for (auto *p: l1.parameters()) params.push_back(p);
+  // for (auto *p: l2.parameters()) params.push_back(p);
+  // for (auto *p: l3.parameters()) params.push_back(p);
+
+  tl::Adam opt(model.parameters(), 0.005f);
 
   // training loop
   for (int64_t step = 0; step < 3000; ++step) {
-    tl::Tensor h1 = tl::relu(l1.forward(x_train)); // activation after first layer
-    tl::Tensor h2 = tl::relu(l2.forward(h1)); // activation after second layer
-    tl::Tensor logits = l3.forward(h2); // classification head
+    // tl::Tensor h1 = tl::relu(l1.forward(x_train)); // activation after first layer
+    // tl::Tensor h2 = tl::relu(l2.forward(h1)); // activation after second layer
+    // tl::Tensor logits = l3.forward(h2); // classification head
+    tl::Tensor logits = model.forward(x_train);
     tl::Tensor loss = tl::cross_entropy_loss(logits, y_train); // calculate loss
 
     opt.zero_grad();
@@ -82,9 +87,10 @@ int main() {
   // training accuracy
   // overfit check
   {
-      tl::Tensor h1 = tl::relu(l1.forward(x_train));
-      tl::Tensor h2 = tl::relu(l2.forward(h1));
-      tl::Tensor logits = l3.forward(h2);
+      // tl::tensor h1 = tl::relu(l1.forward(x_train));
+      // tl::tensor h2 = tl::relu(l2.forward(h1));
+      // tl::tensor logits = l3.forward(h2);
+      tl::Tensor logits = model.forward(x_train);
       int64_t correct = 0;
       for (int64_t i = 0; i < (int64_t)y_train.size(); ++i) {
           float s0 = logits.data()[i*2], s1 = logits.data()[i*2+1];
@@ -95,9 +101,11 @@ int main() {
 
   // evaluate on test step (inference only, no loss)
   {
-    tl::Tensor h1 = tl::relu(l1.forward(x_test)); // activation after first layer
-    tl::Tensor h2 = tl::relu(l2.forward(h1)); // activation after second layer
-    tl::Tensor logits = l3.forward(h2); // classification head
+    // tl::Tensor h1 = tl::relu(l1.forward(x_test)); // activation after first layer
+    // tl::Tensor h2 = tl::relu(l2.forward(h1)); // activation after second layer
+    // tl::Tensor logits = l3.forward(h2); // classification head
+    tl::Tensor logits = model.forward(x_test);
+
 
     int64_t correct = 0;
     for (int64_t i = 0; i < (int64_t)y_test.size(); ++i) {

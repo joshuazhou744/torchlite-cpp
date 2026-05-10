@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tl/tensor.h>
+#include <tl/activation.h>
 
 namespace tl {
 namespace nn {
@@ -156,6 +157,12 @@ public:
 
 private:
   Tensor pe_; // precomputed positional encoding table with shape: [max_len, d_model]
+};
+
+class ReLU: public Module {
+public:
+  Tensor forward(const Tensor& input) const override { return relu(input); }
+  std::vector<Tensor*> parameters() override { return {}; }
 };
 
 } // nn
