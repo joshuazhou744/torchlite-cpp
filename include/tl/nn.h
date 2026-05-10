@@ -2,6 +2,7 @@
 
 #include <tl/tensor.h>
 #include <tl/activation.h>
+#include <tl/ops.h>
 
 namespace tl {
 namespace nn {
@@ -162,6 +163,15 @@ private:
 class ReLU: public Module {
 public:
   Tensor forward(const Tensor& input) const override { return relu(input); }
+  std::vector<Tensor*> parameters() override { return {}; }
+};
+
+class Flatten: public Module {
+public:
+  Tensor forward(const Tensor& input) const override {
+    int64_t N = input.sizes()[0];
+    return reshape(input, {N, input.numel() / N});
+  }
   std::vector<Tensor*> parameters() override { return {}; }
 };
 
