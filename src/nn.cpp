@@ -6,9 +6,31 @@
 #include <random>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 namespace tl {
 namespace nn {
+
+// Sequential model
+Sequential::Sequential(std::vector<Module*> layers)
+  : layers_(layers) {}
+
+Tensor Sequential::forward(const Tensor& input) const {
+  Tensor out = input;
+  for (Module* layer: layers_) {
+    out = layer->forward(out);
+  }
+  return out;
+}
+
+std::vector<Tensor*> Sequential::parameters() {
+  std::vector<Tensor*> params;
+  for (Module* layer: layers_) {
+    auto p = layer->parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  }
+  return params;
+}
 
 // Linear layer
 Linear::Linear(int64_t in_features, int64_t out_features, bool use_bias)

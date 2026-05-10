@@ -5,7 +5,7 @@
 namespace tl {
 namespace nn {
 
-// Base nn module
+// Base nn module (abstract class)
 class Module {
 public:
   virtual ~Module() = default; // use default destructor
@@ -22,17 +22,17 @@ public:
 
 private:
   std::vector<Module*> layers_;
-}
+};
 
 // Linear layer: y = xW^T + b
-class Linear {
+class Linear: public Module {
 public:
   Linear(int64_t in_features, int64_t out_features, bool use_bias = true);
   // forward function to do input @ weight + bias (matmul and add bias)
-  Tensor forward(const Tensor& input) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
   void set_weight(const Tensor& w) { weight_ = w; }
   void set_bias(const Tensor& b) { bias_ = b; }
-  std::vector<Tensor*> parameters();
   const Tensor& weight() const { return weight_; }
   const Tensor& bias() const { return bias_; }
 
@@ -44,11 +44,11 @@ private:
 
 // Conv2d layer: slide C_out filters of shape (C_in, kH, kW) over (N, C_in, H, W) input
 // square kernels only for simplicity
-class Conv2d {
+class Conv2d: public Module {
 public:
   Conv2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride = 1, int64_t padding = 0, bool use_bias = true);
-  Tensor forward(const Tensor& input) const;
-  std::vector<Tensor*> parameters();
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
   const Tensor& weight() const { return weight_; }
   const Tensor& bias() const { return bias_; }
 
@@ -60,15 +60,15 @@ private:
 };
 
 // Layer normalization: normalize across last dimension
-class LayerNorm {
+class LayerNorm: public Module {
 public:
   LayerNorm(int64_t normalized_shape, float eps = 1e-5);
-  Tensor forward(const Tensor& input) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }
   void set_beta(const Tensor& b) { beta_ = b; }
   const Tensor& gamma() const { return gamma_; }
   const Tensor& beta() const { return beta_; }
-  std::vector<Tensor*> parameters();
 
 private:
   Tensor gamma_; // learnable scale, shape: [normalized_shape]
