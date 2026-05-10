@@ -5,6 +5,25 @@
 namespace tl {
 namespace nn {
 
+// Base nn module
+class Module {
+public:
+  virtual ~Module() = default; // use default destructor
+  virtual Tensor forward(const Tensor& input) const = 0; // pure virtual forward
+  virtual std::vector<Tensor*> parameters() = 0; // pure virtual parameters
+};
+
+// Sequential: chain of modules
+class Sequential: public Module {
+public:
+  Sequential(std::vector<Module*> layers);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+
+private:
+  std::vector<Module*> layers_;
+}
+
 // Linear layer: y = xW^T + b
 class Linear {
 public:
