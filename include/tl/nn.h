@@ -114,18 +114,17 @@ private:
 };
 
 // TransformerEncoderLayer: MSA and FFN with residual connections and layer normalization
-class TransformerEncoderLayer {
+class TransformerEncoderLayer: public Module {
 public:
   TransformerEncoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p = 0.1f);
-  Tensor forward(const Tensor& input) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
 
   MultiHeadAttention& msa() { return msa_; }
   LayerNorm& norm1() { return norm1_; }
   LayerNorm& norm2() { return norm2_; }
   Linear& ff1() { return ff1_; }
   Linear& ff2() { return ff2_; }
-
-  std::vector<Tensor*> parameters();
 
 private:
   MultiHeadAttention msa_;
@@ -137,24 +136,24 @@ private:
 };
 
 // TransformerEncoder: stack of N encoder layers
-class TransformerEncoder {
+class TransformerEncoder: public Module {
 public:
   TransformerEncoder(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p = 0.1f);
-  Tensor forward(const Tensor& input) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
 
   TransformerEncoderLayer& layer(int64_t i) { return layers_[i]; }
-
-  std::vector<Tensor*> parameters();
 
 private:
   std::vector<TransformerEncoderLayer> layers_;
 };
 
 // PositionalEncoding: add sinusoidal position information to input tensors
-class PositionalEncoding {
+class PositionalEncoding: public Module {
 public:
   PositionalEncoding(int64_t d_model, int64_t max_len = 5000);
-  Tensor forward(const Tensor& input) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return {}; }
 
 private:
   Tensor pe_; // precomputed positional encoding table with shape: [max_len, d_model]
