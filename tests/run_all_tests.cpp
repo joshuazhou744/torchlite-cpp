@@ -8,6 +8,7 @@ void test_nn();
 void test_autograd();
 void test_loss();
 void test_optim();
+void test_model_io();
 
 int main() {
   std::cout << "Running all tests... \n" << std::endl;
@@ -20,6 +21,7 @@ int main() {
   test_autograd();
   test_loss();
   test_optim();
+  test_model_io();
 
   return 0;
 }

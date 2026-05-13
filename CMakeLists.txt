@@ -15,6 +15,7 @@ add_library(torchlite
     src/autograd.cpp
     src/loss.cpp
     src/optim.cpp
+    src/model_io.cpp
 )
 
 # Eigen library link
@@ -47,6 +48,7 @@ if(BUILD_TESTS)
     tests/test_autograd.cpp
     tests/test_loss.cpp
     tests/test_optim.cpp
+    tests/test_model_io.cpp
   )
   target_link_libraries(run_tests PRIVATE torchlite)
 endif()
