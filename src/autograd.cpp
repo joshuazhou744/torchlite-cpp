@@ -325,7 +325,6 @@ void MatmulBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[1], db);
 }
 
-
 // flipped convolution (backward of convolution is another convolution)
 void Conv2dBackward::backward(const Tensor& grad_output) {
   const int64_t C_out = grad_output.sizes()[1];
@@ -397,5 +396,55 @@ void Conv2dBackward::backward(const Tensor& grad_output) {
   if (inputs.size() > 2) accumulate_grad(inputs[2], grad_bias);
 }
 
+// maximum 2D pooling
+void MaxPool2dBackward::backward(const Tensor& grad_output) {
+  // input gradient is zero everywhere except at cached argmax indices
+  Tensor input_grad = zeros({N, C, H, W});
+  float* igp = input_grad.data();
+  const float* gop = grad_output.data();
+
+  for (int64_t i = 0; i < (int64_t)argmax_indices.size(); ++i) {
+    int64_t max_index = argmax_indices[i];
+    if (max_index < 0) continue; // entirely padded window
+    igp[max_index] += gop[i];
+  }
+  accumulate_grad(inputs[0], input_grad);
+}
+
+// average 2D pooling
+void AvgPool2dBackward::backward(const Tensor& grad_output) {
+  // every input cell in window contributes 1 / k^2
+  // each cell gets grad_output / k^2
+  Tensor input_grad = zeros({N, C, H, W});
+  float* igp = input_grad.data();
+  const float* gop = grad_output.data();
+
+  const int64_t H_out = grad_output.sizes()[2];
+  const int64_t W_out = grad_output.sizes()[3];
+  const float window_area = static_cast<float> (kernel_size * kernel_size);
+
+  for (int64_t n = 0; n < N; ++n) {
+    for (int64_t c = 0; c < C; ++c) {
+      for (int64_t oh = 0; oh < H_out; ++oh) {
+        for (int64_t ow = 0; ow < W_out; ++ow) {
+          int64_t ih_start = oh * stride - padding;
+          int64_t iw_start = ow * stride - padding;
+
+          float spread = gop[n*(C*H_out*W_out) + c*(H_out*W_out) + oh*W_out + ow] / window_area;
+
+          for (int64_t kh = 0; kh < kernel_size; ++kh) {
+            for (int64_t kw = 0; kw < kernel_size; ++kw) {
+              int64_t ih = ih_start + kh;
+              int64_t iw = iw_start + kw;
+              if (ih < 0 || ih >= H || iw < 0 || iw >= W) continue;
+              igp[n*(C*H*W) + c*(H*W) + ih*W + iw] += spread;
+            }
+          }
+        }
+      }
+    }
+  }
+  accumulate_grad(inputs[0], input_grad);
+}
 
 } // tl

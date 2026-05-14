@@ -967,6 +967,8 @@ Tensor max_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride, int6
   const float* ip = input.data();
   float* op = out.data();
 
+  std::vector<int64_t> argmax_indices(N * C * H_out * W_out, -1);
+
   for (int64_t n = 0; n < N; ++n) {
     for (int64_t c = 0; c < C; ++c) {
       for (int64_t oh = 0; oh < H_out; ++oh) {
@@ -975,21 +977,39 @@ Tensor max_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride, int6
           int64_t iw_start = ow * stride - padding;
 
           float max_val = -std::numeric_limits<float>::infinity();
+          int64_t arg = -1;
           for (int64_t kh = 0; kh < kernel_size; ++kh) {
             for (int64_t kw = 0; kw < kernel_size; ++kw) {
               int64_t ih = ih_start + kh;
               int64_t iw = iw_start + kw;
               if (ih < 0 || ih >= H || iw < 0 || iw >= W) continue;
-              float v = ip[n*(C*H*W) + c*(H*W) + ih*W + iw];
-              if (v > max_val) max_val = v;
+              int64_t in_i = n*(C*H*W) + c*(H*W) + ih*W + iw;
+              float v = ip[in_i];
+              if (v > max_val) {
+                max_val = v;
+                arg = in_i;
+              }
             }
           }
 
-          op[n*(C*H_out*W_out) + c*(H_out*W_out) + oh*W_out + ow] = max_val;
+          int64_t out_i = n*(C*H_out*W_out) + c*(H_out*W_out) + oh*W_out + ow;
+          op[out_i] = (arg >= 0) ? max_val : 0.0f;
+          argmax_indices[out_i] = arg;
         }
       }
     }
   }
+
+  if (input.requires_grad) {
+    if (auto fn = track<MaxPool2dBackward>(out, {&input})) {
+      fn->argmax_indices = std::move(argmax_indices);
+      fn->N = N;
+      fn->C = C;
+      fn->H = H;
+      fn->W = W;
+    }
+  }
+
   return out;
 }
 
@@ -1033,6 +1053,20 @@ Tensor avg_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride, int6
       }
     }
   }
+
+
+  if (input.requires_grad) {
+    if (auto fn = track<AvgPool2dBackward>(out, {&input})) {
+      fn->kernel_size = kernel_size;
+      fn->stride = stride;
+      fn->padding = padding;
+      fn->N = N;
+      fn->C = C;
+      fn->H = H;
+      fn->W = W;
+    }
+  }
+
   return out;
 }
 

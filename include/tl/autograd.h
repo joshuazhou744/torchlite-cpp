@@ -160,6 +160,20 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class MaxPool2dBackward: public GradFunction {
+public:
+  std::vector<int64_t> armax_indices; // flat input index per output cell, -1 if window all out of bounds
+  int64_t N, C, H, W;
+  void backward(const Tensor& grad_output) override;
+};
+
+class AvgPool2dBackward: public GradFunction {
+public:
+  int64_t kernel_size, stride, padding;
+  int64_t N, C, H, W;
+  void backward(const Tensor& grad_output) override;
+};
+
 // Helper functions
 
 template<typename BackwardFn>
