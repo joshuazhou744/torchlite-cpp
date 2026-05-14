@@ -323,5 +323,43 @@ void test_ops() {
   assert(is_close(conv_out.data()[2], 90.0f));
   assert(is_close(conv_out.data()[3], 99.0f));
 
+  // test max_pool2d: (1,1,4,4) input, kernel=2, stride=2 -> (1,1,2,2)
+  // input (filled 1..16):
+  //  1  2 | 3  4
+  //  5  6 | 7  8
+  // ----- | -----
+  //  9 10 | 11 12
+  // 13 14 | 15 16
+  // expected: max of each 2x2 tile -> 6, 8, 14, 16
+  tl::Tensor pool_in({1, 1, 4, 4});
+  for (int i = 0; i < 16; ++i) pool_in.data()[i] = (float)(i + 1);
+
+  tl::Tensor mp_out = tl::max_pool2d(pool_in, 2, 2, 0);
+  assert(mp_out.sizes()[0] == 1);
+  assert(mp_out.sizes()[1] == 1);
+  assert(mp_out.sizes()[2] == 2);
+  assert(mp_out.sizes()[3] == 2);
+  assert(is_close(mp_out.data()[0], 6.0f));
+  assert(is_close(mp_out.data()[1], 8.0f));
+  assert(is_close(mp_out.data()[2], 14.0f));
+  assert(is_close(mp_out.data()[3], 16.0f));
+
+  // test avg_pool2d: same input, kernel=2, stride=2 -> (1,1,2,2)
+  // expected: avg of each 2x2 tile -> 3.5, 5.5, 11.5, 13.5
+  tl::Tensor ap_out = tl::avg_pool2d(pool_in, 2, 2, 0);
+  assert(ap_out.sizes()[0] == 1);
+  assert(ap_out.sizes()[1] == 1);
+  assert(ap_out.sizes()[2] == 2);
+  assert(ap_out.sizes()[3] == 2);
+  assert(is_close(ap_out.data()[0], 3.5f));
+  assert(is_close(ap_out.data()[1], 5.5f));
+  assert(is_close(ap_out.data()[2], 11.5f));
+  assert(is_close(ap_out.data()[3], 13.5f));
+
+  // test max_pool2d default stride (stride=0 -> uses kernel_size)
+  tl::Tensor mp_default = tl::max_pool2d(pool_in, 2);
+  assert(mp_default.sizes()[2] == 2 && mp_default.sizes()[3] == 2);
+  assert(is_close(mp_default.data()[0], 6.0f));
+
   std::cout << "ops tests passed" << std::endl;
 }

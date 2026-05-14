@@ -261,5 +261,42 @@ void test_autograd() {
 
   }
 
+  // MaxPool2dBackward: gradient routes only to the argmax of each window
+  {
+    // input (1,1,4,4) filled 1..16, kernel=2 stride=2 -> output (1,1,2,2)
+    // winners are the bottom-right cell of each 2x2 tile: values 6, 8, 14, 16
+    // at flat input indices 5, 7, 13, 15
+    tl::Tensor x({1, 1, 4, 4});
+    for (int i = 0; i < 16; ++i) x.data()[i] = (float)(i + 1);
+    x.set_requires_grad(true);
+
+    tl::Tensor out = tl::max_pool2d(x, 2, 2, 0);
+    out.backward();  // seeds grad = ones(1,1,2,2)
+
+    // grad is 1.0 at the 4 argmax positions, 0.0 everywhere else
+    for (int i = 0; i < 16; ++i) {
+      bool is_winner = (i == 5 || i == 7 || i == 13 || i == 15);
+      assert(close(x.grad().data()[i], is_winner ? 1.0f : 0.0f));
+    }
+    std::cout << "  MaxPool2dBackward ok\n";
+  }
+
+  // AvgPool2dBackward: gradient spreads uniformly (grad / k^2) over each window
+  {
+    // input (1,1,4,4), kernel=2 stride=2 -> each cell belongs to exactly one window
+    // backward seed = 1.0 per output cell, k^2 = 4 -> every input cell gets 0.25
+    tl::Tensor x({1, 1, 4, 4});
+    for (int i = 0; i < 16; ++i) x.data()[i] = (float)(i + 1);
+    x.set_requires_grad(true);
+
+    tl::Tensor out = tl::avg_pool2d(x, 2, 2, 0);
+    out.backward();
+
+    for (int i = 0; i < 16; ++i) {
+      assert(close(x.grad().data()[i], 0.25f));
+    }
+    std::cout << "  AvgPool2dBackward ok\n";
+  }
+
   std::cout << "autograd tests passed.\n";
 }

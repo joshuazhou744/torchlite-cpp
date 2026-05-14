@@ -162,7 +162,7 @@ public:
 
 class MaxPool2dBackward: public GradFunction {
 public:
-  std::vector<int64_t> armax_indices; // flat input index per output cell, -1 if window all out of bounds
+  std::vector<int64_t> argmax_indices; // flat input index per output cell, -1 if window all out of bounds
   int64_t N, C, H, W;
   void backward(const Tensor& grad_output) override;
 };
