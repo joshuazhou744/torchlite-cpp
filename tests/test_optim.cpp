@@ -139,5 +139,5 @@ void test_optim() {
     std::cout << "  SGD convergence ok\n";
   }
 
-  std::cout << "Optim tests passed.\n\n";
+  std::cout << "Optim tests passed.\n";
 }

@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <algorithm> // for max()
 #include <cmath> // for sqrt() and exp()
+#include <limits> // for infinity
 
 namespace tl {
 
@@ -948,6 +949,91 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
   }
 
   return result;
+}
+
+// max pooling: slide a square window over the last 2 dims of the tensor and take maximum in the window
+Tensor max_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride, int64_t padding) {
+  if (stride == 0) stride = kernel_size;
+
+  const int64_t N = input.sizes()[0];
+  const int64_t C = input.sizes()[1];
+  const int64_t H = input.sizes()[2];
+  const int64_t W = input.sizes()[3];
+
+  const int64_t H_out = (H + 2 * padding - kernel_size) / stride + 1;
+  const int64_t W_out = (W + 2 * padding - kernel_size) / stride + 1;
+
+  Tensor out({N, C, H_out, W_out});
+  const float* ip = input.data();
+  float* op = out.data();
+
+  for (int64_t n = 0; n < N; ++n) {
+    for (int64_t c = 0; c < C; ++c) {
+      for (int64_t oh = 0; oh < H_out; ++oh) {
+        for (int64_t ow = 0; ow < W_out; ++ow) {
+          int64_t ih_start = oh * stride - padding;
+          int64_t iw_start = ow * stride - padding;
+
+          float max_val = -std::numeric_limits<float>::infinity();
+          for (int64_t kh = 0; kh < kernel_size; ++kh) {
+            for (int64_t kw = 0; kw < kernel_size; ++kw) {
+              int64_t ih = ih_start + kh;
+              int64_t iw = iw_start + kw;
+              if (ih < 0 || ih >= H || iw < 0 || iw >= W) continue;
+              float v = ip[n*(C*H*W) + c*(H*W) + ih*W + iw];
+              if (v > max_val) max_val = v;
+            }
+          }
+
+          op[n*(C*H_out*W_out) + c*(H_out*W_out) + oh*W_out + ow] = max_val;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+
+// avg pooling: slide a square window over the last 2 dims of the tensor and take average of the window
+Tensor avg_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride, int64_t padding) {
+  if (stride == 0) stride = kernel_size;
+
+  const int64_t N = input.sizes()[0];
+  const int64_t C = input.sizes()[1];
+  const int64_t H = input.sizes()[2];
+  const int64_t W = input.sizes()[3];
+
+  const int64_t H_out = (H + 2 * padding - kernel_size) / stride + 1;
+  const int64_t W_out = (W + 2 * padding - kernel_size) / stride + 1;
+  const float window_area = static_cast<float> (kernel_size * kernel_size);
+
+  Tensor out({N, C, H_out, W_out});
+  const float* ip = input.data();
+  float* op = out.data();
+
+  for (int64_t n = 0; n < N; ++n) {
+    for (int64_t c = 0; c < C; ++c) {
+      for (int64_t oh = 0; oh < H_out; ++oh) {
+        for (int64_t ow = 0; ow < W_out; ++ow) {
+          int64_t ih_start = oh * stride - padding;
+          int64_t iw_start = ow * stride - padding;
+
+          float sum = 0.0f;
+          for (int64_t kh = 0; kh < kernel_size; ++kh) {
+            for (int64_t kw = 0; kw < kernel_size; ++kw) {
+              int64_t ih = ih_start + kh;
+              int64_t iw = iw_start + kw;
+              if (ih < 0 || ih >= H || iw < 0 || iw >= W) continue;
+              sum += ip[n*(C*H*W) + c*(H*W) + ih*W + iw];
+            }
+          }
+
+          op[n*(C*H_out*W_out) + c*(H_out*W_out) + oh*W_out + ow] = sum / window_area;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 
