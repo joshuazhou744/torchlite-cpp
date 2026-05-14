@@ -174,5 +174,29 @@ public:
   std::vector<Tensor*> parameters() override { return {}; }
 };
 
+class MaxPool2d: public Module {
+public:
+  MaxPool2d(int64_t kernel_size, int64_t stride = 0, int64_t padding = 0)
+    : kernel_size_(kernel_size), stride_(stride), padding_(padding) {}
+  Tensor forward(const Tensor& input) const override {
+    return max_pool2d(input, kernel_size_, stride_, padding_);
+  }
+  std::vector<Tensor*> parameters() override { return {}; }
+private:
+  int64_t kernel_size_, stride_, padding_;
+};
+
+class AvgPool2d: public Module {
+public:
+  AvgPool2d(int64_t kernel_size, int64_t stride = 0, int64_t padding = 0)
+    : kernel_size_(kernel_size), stride_(stride), padding_(padding) {}
+  Tensor forward(const Tensor& input) const override {
+    return avg_pool2d(input, kernel_size_, stride_, padding_);
+  }
+  std::vector<Tensor*> parameters() override { return {}; }
+private:
+  int64_t kernel_size_, stride_, padding_;
+};
+
 } // nn
 } // tl
