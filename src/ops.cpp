@@ -209,6 +209,52 @@ Tensor div(const Tensor& a, const Tensor& b) {
   return out;
 }
 
+// naive reference kernel
+// GEMM = GEneneral Matrix Multiply (BLAS name)
+static void gemm_naive(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
+  for (int64_t m = 0; m < M; ++m) {
+    for (int64_t n = 0; n < N; ++n) {
+      out[m * N + n] = 0.0f;
+    }
+    for (int64_t k = 0; k < K; ++k) {
+      float a_val = a[m * K + k];
+      for (int64_t n = 0; n < N; ++n) {
+        out[m * N + n] += a_val * b[k * N + n];
+      }
+    }
+  }
+}
+
+// cache-blocked kernel, T = 64
+static void gemm_blocked(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
+  const int64_t T = 64;
+
+  // zero the output once up front, kk loop accumulates into each tile
+  // across many steps, so we cannot zero per row like naive kernel
+  for (int64_t i = 0; i < M * N; ++i) out[i] = 0.0f;
+
+  // outer loops: step over output tiles and slices of the contraction dim, K
+  for (int64_t mm = 0; mm < M; mm += T) {
+    int64_t m_end = std::min(mm + T, M);
+    for (int64_t nn = 0; nn < N; nn += T) {
+      int64_t n_end = std::min(nn + T, N);
+      for (int64_t kk = 0; kk < K; kk += T) {
+        int64_t k_end = std::mind(kk + T, K);
+
+        // inner loops: regular matmul on tiles
+        for (int64_t m = mm; m < m_end; ++m) {
+          for (int64_t k = kk; kk < k_end; ++k) {
+            float a_val = a[m * K + k];
+            for (int64_t n = nn; nn < n_end; ++n) {
+              out[m * N + n] += a_val * b[k * N + n];
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 // matrix multiplication
 Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
   Tensor a = a_in.contiguous();
@@ -273,17 +319,7 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     const float* bp = b.data() + index_b;
     float* op = out.data() + (i * M * N);
 
-    for (int64_t m = 0; m < M; ++m) {
-      for (int64_t n = 0; n < N; ++n) {
-        op[m * N + n] = 0.0f;
-      }
-      for (int64_t k = 0; k < K; ++k) {
-        float a_val = ap[m * K + k];
-        for (int64_t n = 0; n < N; ++n) {
-          op[m * N + n] += a_val * bp[k * N + n];
-        }
-      }
-    }
+    gemm_blocked(ap, bp, op, M, N, K);
   }
 
   Tensor result = out;

@@ -141,5 +141,43 @@ void test_nn() {
     assert(is_close_nn(added_to_in2, pe_out3.data()[i]));
   }
 
+  // test MaxPool2d: kernel=2, stride=2 over (1,1,4,4) input filled 1..16
+  tl::nn::MaxPool2d maxpool(2, 2);
+  tl::Tensor pool_in({1, 1, 4, 4});
+  for (int64_t i = 0; i < 16; ++i) pool_in.data()[i] = static_cast<float>(i + 1);
+  tl::Tensor maxpool_out = maxpool.forward(pool_in);
+  assert(maxpool_out.sizes().size() == 4);
+  assert(maxpool_out.sizes()[0] == 1);
+  assert(maxpool_out.sizes()[1] == 1);
+  assert(maxpool_out.sizes()[2] == 2);
+  assert(maxpool_out.sizes()[3] == 2);
+  // each 2x2 window's max: top-left=6, top-right=8, bottom-left=14, bottom-right=16
+  assert(is_close_nn(maxpool_out.data()[0], 6.0f));
+  assert(is_close_nn(maxpool_out.data()[1], 8.0f));
+  assert(is_close_nn(maxpool_out.data()[2], 14.0f));
+  assert(is_close_nn(maxpool_out.data()[3], 16.0f));
+
+  // test AvgPool2d: same input and config
+  tl::nn::AvgPool2d avgpool(2, 2);
+  tl::Tensor avgpool_out = avgpool.forward(pool_in);
+  assert(avgpool_out.sizes().size() == 4);
+  assert(avgpool_out.sizes()[0] == 1);
+  assert(avgpool_out.sizes()[1] == 1);
+  assert(avgpool_out.sizes()[2] == 2);
+  assert(avgpool_out.sizes()[3] == 2);
+  // each 2x2 window's average
+  assert(is_close_nn(avgpool_out.data()[0], 3.5f));
+  assert(is_close_nn(avgpool_out.data()[1], 5.5f));
+  assert(is_close_nn(avgpool_out.data()[2], 11.5f));
+  assert(is_close_nn(avgpool_out.data()[3], 13.5f));
+
+  // test default stride (stride == kernel_size when omitted)
+  tl::nn::MaxPool2d maxpool_def(2);
+  tl::Tensor maxpool_def_out = maxpool_def.forward(pool_in);
+  assert(maxpool_def_out.sizes()[2] == 2);
+  assert(maxpool_def_out.sizes()[3] == 2);
+  assert(is_close_nn(maxpool_def_out.data()[0], 6.0f));
+  assert(is_close_nn(maxpool_def_out.data()[3], 16.0f));
+
   std::cout << "nn tests passed" << std::endl;
 }
