@@ -239,13 +239,13 @@ static void gemm_blocked(const float* a, const float* b, float* out, int64_t M, 
     for (int64_t nn = 0; nn < N; nn += T) {
       int64_t n_end = std::min(nn + T, N);
       for (int64_t kk = 0; kk < K; kk += T) {
-        int64_t k_end = std::mind(kk + T, K);
+        int64_t k_end = std::min(kk + T, K);
 
         // inner loops: regular matmul on tiles
         for (int64_t m = mm; m < m_end; ++m) {
-          for (int64_t k = kk; kk < k_end; ++k) {
+          for (int64_t k = kk; k < k_end; ++k) {
             float a_val = a[m * K + k];
-            for (int64_t n = nn; nn < n_end; ++n) {
+            for (int64_t n = nn; n < n_end; ++n) {
               out[m * N + n] += a_val * b[k * N + n];
             }
           }

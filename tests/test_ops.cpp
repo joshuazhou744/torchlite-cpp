@@ -77,6 +77,19 @@ void test_ops() {
     assert(is_close(output.data()[i], 1.0f));
   }
 
+  // heavy matmul: (256, 512) @ (512, 256) — exercises gemm_blocked tile loops
+  // fill a with all 1s, b with all 1s -> every output element = sum over K = 512
+  tl::Tensor heavy_a({256, 512});
+  tl::Tensor heavy_b({512, 256});
+  for (int64_t i = 0; i < heavy_a.numel(); ++i) heavy_a.data()[i] = 1.0f;
+  for (int64_t i = 0; i < heavy_b.numel(); ++i) heavy_b.data()[i] = 1.0f;
+  tl::Tensor heavy_out = tl::matmul(heavy_a, heavy_b);
+  assert(heavy_out.sizes()[0] == 256);
+  assert(heavy_out.sizes()[1] == 256);
+  for (int64_t i = 0; i < heavy_out.numel(); ++i) {
+    assert(is_close(heavy_out.data()[i], 512.0f, 1e-2f));
+  }
+
   // test softmax normalization and order
   tl::Tensor softmax_tensor({3});
   softmax_tensor.data()[0] = 1.0f;
