@@ -48,7 +48,7 @@ private:
 // square kernels only for simplicity
 class Conv2d: public Module {
 public:
-  Conv2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride = 1, int64_t padding = 0, bool use_bias = true);
+  Conv2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride = 1, int64_t padding = 0, int64_t groups = 1, bool use_bias = true);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   const Tensor& weight() const { return weight_; }
@@ -57,7 +57,7 @@ public:
 private:
   Tensor weight_; // (out_channels, in_channels, kernel_size, kernel_size)
   Tensor bias_; // (out_channels,)
-  int64_t stride_, padding_;
+  int64_t stride_, padding_, groups_;
   bool use_bias_;
 };
 

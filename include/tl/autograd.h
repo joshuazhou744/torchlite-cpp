@@ -156,6 +156,7 @@ public:
   Tensor weight_cache;
   Tensor input_cache;
   int64_t stride, padding;
+  int64_t groups = 1;
   int64_t N, C_in, H, W;
   void backward(const Tensor& grad_output) override;
 };

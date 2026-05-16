@@ -261,6 +261,78 @@ void test_autograd() {
 
   }
 
+  // Conv2dBackward: regular conv. input (1,1,3,3), weight (1,1,2,2) all ones, no padding.
+  //   forward output (1,1,2,2) — each cell is the sum of the corresponding 2x2 patch.
+  //   summing output then backward gives easy-to-derive gradients:
+  //     grad_input counts how many output windows touch each input pixel (weight=1 everywhere):
+  //        [1 2 1]
+  //        [2 4 2]
+  //        [1 2 1]
+  //     grad_weight[a,b] = sum of input pixels at relative offset (a,b) across all 4 windows:
+  //        [12 16]
+  //        [24 28]
+  //     grad_bias = sum of grad_output = 4
+  {
+    tl::Tensor x({1, 1, 3, 3});
+    for (int i = 0; i < 9; ++i) x.data()[i] = (float)(i + 1);
+    x.set_requires_grad(true);
+
+    tl::Tensor w({1, 1, 2, 2});
+    for (int i = 0; i < 4; ++i) w.data()[i] = 1.0f;
+    w.set_requires_grad(true);
+
+    tl::Tensor b({1});
+    b.data()[0] = 0.0f;
+    b.set_requires_grad(true);
+
+    tl::Tensor out = tl::conv2d(x, w, b, /*stride=*/1, /*padding=*/0);
+    out.backward();
+
+    float expected_gi[9] = {1, 2, 1, 2, 4, 2, 1, 2, 1};
+    for (int i = 0; i < 9; ++i) assert(close(x.grad().data()[i], expected_gi[i]));
+
+    float expected_gw[4] = {12, 16, 24, 28};
+    for (int i = 0; i < 4; ++i) assert(close(w.grad().data()[i], expected_gw[i]));
+
+    assert(close(b.grad().data()[0], 4.0f));
+    std::cout << "  Conv2dBackward ok\n";
+  }
+
+  // Conv2dBackward with groups=2 (depthwise): backward must keep channels isolated.
+  //   input (1,2,2,2): ch0 = [1,2,3,4], ch1 = [10,20,30,40]
+  //   weight (2,1,2,2): both filters all ones
+  //   forward (1,2,1,1): out[ch0]=10, out[ch1]=100
+  //   backward with grad_out = ones:
+  //     grad_input: each input cell touched by exactly one (ch, output) pair with weight=1
+  //                 -> grad = 1 everywhere. if backward mixed channels, grad would not be 1.
+  //     grad_weight[filter0] = ch0 patch values = [1,2,3,4]   (NOT ch1 values)
+  //     grad_weight[filter1] = ch1 patch values = [10,20,30,40]
+  {
+    tl::Tensor x({1, 2, 2, 2});
+    float xvals[8] = {1, 2, 3, 4, 10, 20, 30, 40};
+    for (int i = 0; i < 8; ++i) x.data()[i] = xvals[i];
+    x.set_requires_grad(true);
+
+    tl::Tensor w({2, 1, 2, 2});
+    for (int i = 0; i < 8; ++i) w.data()[i] = 1.0f;
+    w.set_requires_grad(true);
+
+    tl::Tensor b; // no bias
+
+    tl::Tensor out = tl::conv2d(x, w, b, /*stride=*/1, /*padding=*/0, /*groups=*/2);
+    out.backward();
+
+    // channel-isolation check on grad_input: all 1.0 (would diverge if channels mixed)
+    for (int i = 0; i < 8; ++i) assert(close(x.grad().data()[i], 1.0f));
+
+    // channel-isolation check on grad_weight: filter g sees only channel g's input
+    for (int i = 0; i < 4; ++i) {
+      assert(close(w.grad().data()[i],     xvals[i]));      // filter0 grad == ch0 values
+      assert(close(w.grad().data()[i + 4], xvals[i + 4]));  // filter1 grad == ch1 values
+    }
+    std::cout << "  Conv2dBackward (depthwise/groups) ok\n";
+  }
+
   // MaxPool2dBackward: gradient routes only to the argmax of each window
   {
     // input (1,1,4,4) filled 1..16, kernel=2 stride=2 -> output (1,1,2,2)

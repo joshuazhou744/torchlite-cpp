@@ -79,7 +79,7 @@ Tensor clamp(const Tensor& input, float min_val, float max_val);
 Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value = 0.0f);
 
 // conv2d: slide (C_out, C_in, kH, kW) filters (kernel) over (N, C_in, H, W) input to produce (N, C_out, H_out, W_out)
-Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride = 1, int64_t padding = 0);
+Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride = 1, int64_t padding = 0, int64_t groups = 1);
 
 // max pooling: take maximum over each window sized (kernel_size, kernel_size)
 Tensor max_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride = 0, int64_t padding = 0);

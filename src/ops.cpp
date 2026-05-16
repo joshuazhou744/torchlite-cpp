@@ -898,7 +898,7 @@ Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value) {
 }
 
 // convolution of a filter tensor over an input tensor using im2col (unroll inputs into one big matmul)
-Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride, int64_t padding) {
+Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride, int64_t padding, int64_t groups) {
   const int64_t N = input.sizes()[0];
   const int64_t C_in = input.sizes()[1];
   const int64_t H = input.sizes()[2];
@@ -908,54 +908,73 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
   const int64_t kH = weight.sizes()[2];
   const int64_t kW = weight.sizes()[3];
 
+  // validate groups
+  if (groups <= 0) throw std::invalid_argument("conv2d: groups must be > 0");
+  if (C_in % groups != 0) throw std::invalid_argument("conv2d: groups doesn't divide C_in");
+  if (C_out % groups != 0) throw std::invalid_argument("conv2d: groups doesn't divide C_out");
+  if (weight.sizes()[1] != C_in / groups) throw std::invalid_argument("conv2d: weight.sizes()[1] must equal C_in / groups");
+
+  // per-group channel counts
+  const int64_t C_in_g = C_in / groups;
+  const int64_t C_out_g = C_out / groups;
+
   // remove edge pixels with padding in consideration
   const int64_t H_out = (H + 2 * padding - kH) / stride + 1;
   const int64_t W_out = (W + 2 * padding - kW) / stride + 1;
 
-  // weight: (C_out, C_in, kH, kW)
-  // col: (C_in * kH * kW, H_out * W_out)
-  Tensor w = reshape(weight, {C_out, C_in*kH*kW});
+  // weight: (C_out, C_in_g, kH, kW)
+  // col: (C_in_g * kH * kW, H_out * W_out)
+  Tensor w = reshape(weight, {C_out, C_in_g*kH*kW});
+  std::vector<Tensor> w_groups;
+  // pre-slice weight rows by groups
+  w_groups.reserve(groups);
+  for (int64_t g = 0; g < groups; ++g) {
+    w_groups.push_back(slice(w, 0, g * C_out_g, (g + 1) * C_out_g));
+  }
   Tensor out({N, C_out, H_out*W_out});
   const float* ip = input.data();
 
   for (int64_t n = 0; n < N; ++n) { // iterate over images in a batch
     // im2col for image n only: (C_in*kH*kW, H_out*W_out)
-    Tensor col_n({C_in * kH * kW, H_out * W_out});
-    float* cp = col_n.data();
-    for (int64_t c = 0; c < C_in; ++c) { // iterate over each input channel
-      for (int64_t kh = 0; kh < kH; ++kh) { // iterate over each kernel row
-        for (int64_t kw = 0; kw < kW; ++kw) { // iterate over each kernel col
-          for (int64_t oh = 0; oh < H_out; ++oh) { // iterate over output height
-            for (int64_t ow = 0; ow < W_out; ++ow) { // iterate over output width
-              // map output pixels to input pixel
-              int64_t ih = oh * stride - padding + kh;
-              int64_t iw = ow * stride - padding + kw;
+    for (int64_t g = 0; g < groups; ++g) {
+      Tensor col_ng({C_in_g * kH * kW, H_out * W_out});
+      float* cp = col_ng.data();
+      for (int64_t c = 0; c < C_in_g; ++c) { // iterate over each input channel
+        int64_t c_actual = g * C_in_g + c;
+        for (int64_t kh = 0; kh < kH; ++kh) { // iterate over each kernel row
+          for (int64_t kw = 0; kw < kW; ++kw) { // iterate over each kernel col
+            for (int64_t oh = 0; oh < H_out; ++oh) { // iterate over output height
+              for (int64_t ow = 0; ow < W_out; ++ow) { // iterate over output width
+                // map output pixels to input pixel
+                int64_t ih = oh * stride - padding + kh;
+                int64_t iw = ow * stride - padding + kw;
 
-              // write to the col matrix
-              int64_t col_row = c * kH * kW + kh * kW + kw;
-              int64_t col_col = oh * W_out + ow;
+                // write to the col matrix
+                int64_t col_row = c * kH * kW + kh * kW + kw;
+                int64_t col_col = oh * W_out + ow;
 
-              // flat index into col
-              int64_t col_i = col_row*(H_out*W_out) + col_col;
+                // flat index into col
+                int64_t col_i = col_row*(H_out*W_out) + col_col;
 
-              if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
-                cp[col_i] = 0.0f; // padding
-              } else {
-                int64_t in_i = n*(C_in*H*W) + c*(H*W) + ih*W + iw;
-                cp[col_i] = ip[in_i]; // get input value
+                if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
+                  cp[col_i] = 0.0f; // padding
+                } else {
+                  int64_t in_i = n*(C_in*H*W) + c_actual*(H*W) + ih*W + iw;
+                  cp[col_i] = ip[in_i]; // get input value
+                }
               }
             }
           }
         }
       }
-    }
 
-    // matmul per image: w @ col[n] -> (C_out, H_out * W_out)
-    Tensor out_n = matmul(w, col_n);
-    // copy into out[n]
-    float* op = out.data() + n * C_out * H_out * W_out;
-    const float* onp = out_n.data();
-    for (int64_t i = 0; i < C_out * H_out * W_out; ++i) op[i] = onp[i];
+      // matmul per image: w @ col[n] -> (C_out, H_out * W_out)
+      Tensor out_ng = matmul(w_groups[g], col_ng);
+      // copy into out[n]
+      float* op = out.data() + n * C_out * H_out * W_out + g * C_out_g * H_out * W_out;
+      const float* onp = out_ng.data();
+      for (int64_t i = 0; i < C_out_g * H_out * W_out; ++i) op[i] = onp[i];
+    }
   }
   Tensor result = reshape(out, {N, C_out, H_out, W_out});
 
@@ -970,6 +989,7 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
       fn->input_cache = input.contiguous();
       fn->stride = stride;
       fn->padding = padding;
+      fn->groups = groups;
       fn->N = N;
       fn->C_in = C_in;
       fn->H = H;

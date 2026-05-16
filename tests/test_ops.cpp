@@ -1,6 +1,8 @@
 #include <iostream>
 #include <tl/tensor.h>
 #include <tl/ops.h>
+#include <tl/nn.h>
+#include <tl/factory.h>
 #include <cassert>
 #include <cmath>
 
@@ -335,6 +337,51 @@ void test_ops() {
   assert(is_close(conv_out.data()[1], 63.0f));
   assert(is_close(conv_out.data()[2], 90.0f));
   assert(is_close(conv_out.data()[3], 99.0f));
+
+  // test conv2d with groups=2 (depthwise): each output channel must only see its own
+  // input channel — if any cross-channel mixing leaks through, the asserts below will fail.
+  //
+  // input (1, 2, 3, 3):  channel 0 all 1.0,  channel 1 all 10.0
+  // weight (2, 1, 3, 3): filter 0 all 1.0,   filter 1 all 2.0   (C_in/groups = 1)
+  // padding=0, stride=1 -> output (1, 2, 1, 1):
+  //   out[0,0,0,0] = sum(ch0 patch) * filter0 = 9*1 * 1 = 9
+  //   out[0,1,0,0] = sum(ch1 patch) * filter1 = 9*10 * 2 = 180
+  // if channels were mixed, ch0 output would also pick up ch1's huge values.
+  tl::Tensor dwconv_in({1, 2, 3, 3});
+  for (int i = 0; i < 9;  ++i) dwconv_in.data()[i] = 1.0f;   // channel 0
+  for (int i = 9; i < 18; ++i) dwconv_in.data()[i] = 10.0f;  // channel 1
+
+  tl::Tensor dwconv_w({2, 1, 3, 3});
+  for (int i = 0; i < 9;  ++i) dwconv_w.data()[i] = 1.0f;    // filter for ch 0
+  for (int i = 9; i < 18; ++i) dwconv_w.data()[i] = 2.0f;    // filter for ch 1
+
+  tl::Tensor dwconv_bias; // empty
+  tl::Tensor dwconv_out = tl::conv2d(dwconv_in, dwconv_w, dwconv_bias,
+                                     /*stride=*/1, /*padding=*/0, /*groups=*/2);
+
+  assert(dwconv_out.sizes().size() == 4);
+  assert(dwconv_out.sizes()[0] == 1);
+  assert(dwconv_out.sizes()[1] == 2);
+  assert(dwconv_out.sizes()[2] == 1);
+  assert(dwconv_out.sizes()[3] == 1);
+  assert(is_close(dwconv_out.data()[0], 9.0f));    // ch 0 isolated -> small value
+  assert(is_close(dwconv_out.data()[1], 180.0f));  // ch 1 isolated, filter1 applied -> 180
+
+  // also exercise the nn::Conv2d module path with groups, verify per-group weight shape
+  // (C_out, C_in/groups, k, k) = (4, 1, 3, 3) for a depthwise layer with C=4
+  tl::nn::Conv2d dwmod(/*in=*/4, /*out=*/4, /*k=*/3,
+                       /*stride=*/1, /*padding=*/1, /*groups=*/4, /*bias=*/false);
+  assert(dwmod.weight().sizes().size() == 4);
+  assert(dwmod.weight().sizes()[0] == 4);  // C_out
+  assert(dwmod.weight().sizes()[1] == 1);  // C_in / groups
+  assert(dwmod.weight().sizes()[2] == 3);
+  assert(dwmod.weight().sizes()[3] == 3);
+  tl::Tensor dwmod_in = tl::ones({2, 4, 5, 5});
+  tl::Tensor dwmod_out = dwmod.forward(dwmod_in);
+  assert(dwmod_out.sizes()[0] == 2);
+  assert(dwmod_out.sizes()[1] == 4);  // depthwise preserves channel count
+  assert(dwmod_out.sizes()[2] == 5);  // padding=1 preserves spatial dims
+  assert(dwmod_out.sizes()[3] == 5);
 
   // test max_pool2d: (1,1,4,4) input, kernel=2, stride=2 -> (1,1,2,2)
   // input (filled 1..16):

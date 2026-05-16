@@ -58,13 +58,16 @@ std::vector<Tensor*> Linear::parameters() {
 }
 
 // Convolution 2D
-Conv2d::Conv2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride, int64_t padding, bool use_bias)
-  : weight_(scale(randn({out_channels, in_channels, kernel_size, kernel_size}), std::sqrt(2.0f / (in_channels * kernel_size * kernel_size)))),
+Conv2d::Conv2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride, int64_t padding, int64_t groups, bool use_bias)
+  : weight_(scale(randn({out_channels, in_channels / groups, kernel_size, kernel_size}), std::sqrt(2.0f / ((in_channels / groups) * kernel_size * kernel_size)))),
     bias_(zeros({out_channels})),
     stride_(stride),
     padding_(padding),
+    groups_(groups),
     use_bias_(use_bias)
 {
+  if (in_channels % groups != 0) throw std::invalid_argument("Conv2d: in_channels not divisible by groups");
+  if (out_channels % groups != 0) throw std::invalid_argument("Conv2d: out_channels not divisible by groups");
   weight_.set_requires_grad(true);
   if (use_bias_) bias_.set_requires_grad(true);
 }
@@ -77,7 +80,7 @@ std::vector<Tensor*> Conv2d::parameters() {
 }
 
 Tensor Conv2d::forward(const Tensor& input) const {
-  return conv2d(input, weight_, use_bias_ ? bias_ : Tensor(), stride_, padding_);
+  return conv2d(input, weight_, use_bias_ ? bias_ : Tensor(), stride_, padding_, groups_);
 }
 
 // Layer normalization

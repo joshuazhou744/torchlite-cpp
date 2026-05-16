@@ -332,71 +332,95 @@ void Conv2dBackward::backward(const Tensor& grad_output) {
   const int64_t W_out = grad_output.sizes()[3];
   const int64_t kH = weight_cache.sizes()[2];
   const int64_t kW = weight_cache.sizes()[3];
-  const int64_t CkHkW = C_in * kH * kW;
+  const int64_t C_in_g = C_in / groups;
+  const int64_t C_out_g = C_out / groups;
+  const int64_t patch = C_in_g * kH * kW;
 
   Tensor go = grad_output.contiguous();
   const float* gop = go.data();
 
-  Tensor w = reshape(weight_cache, {C_out, CkHkW});
-  Tensor grad_w = zeros({C_out, CkHkW});
+  Tensor w = reshape(weight_cache, {C_out, patch});
+  Tensor grad_w = zeros({C_out, patch});
   Tensor grad_input = zeros({N, C_in, H, W});
   Tensor grad_bias = zeros({C_out});
 
   float* gi = grad_input.data();
   float* gb = grad_bias.data();
 
+  // pre-slice w by groups
+  std::vector<Tensor> w_groups;
+  w_groups.reserve(groups);
+  for (int64_t g = 0; g < groups; ++g) {
+    w_groups.push_back(slice(w, 0, g * C_out_g, (g + 1) * C_out_g));
+  }
+  float* gwp = grad_w.data();
+
   for (int64_t n = 0; n < N; ++n) {
     // grad_out_n: (C_out, H_out*W_out)
     Tensor grad_out_n = reshape(slice(go, 0, n, n+1), {C_out, H_out*W_out});
-    // col_n: (CkHkW, H_out*W_out)
-    // recompute col_n from cached input
-    Tensor col_n({CkHkW, H_out * W_out});
-    float* cp = col_n.data();
-    const float* ip = input_cache.data();
-    for (int64_t c = 0; c < C_in; ++c) {
-      for (int64_t kh = 0; kh < kH; ++kh) {
-        for (int64_t kw = 0; kw < kW; ++kw) {
-          for (int64_t oh = 0; oh < H_out; ++oh) {
-            for (int64_t ow = 0; ow < W_out; ++ow) {
-              int64_t ih = oh * stride - padding + kh;
-              int64_t iw = ow * stride - padding + kw;
-              int64_t col_row = c * kH * kW + kh * kW + kw;
-              int64_t col_col = oh * W_out + ow;
-              int64_t col_i = col_row * (H_out * W_out) + col_col;
-              if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
-                cp[col_i] = 0.0f;
-              } else {
-                int64_t in_i = n*(C_in*H*W) + c*(H*W) + ih*W + iw;
-                cp[col_i] = ip[in_i];
+    for (int64_t g = 0; g < groups; ++g) {
+      // slice grad_out for this group: (C_out_g, H_out*W_out)
+      Tensor grad_out_ng = slice(grad_out_n, 0, g * C_out_g, (g + 1) * C_out_g);
+
+      // recompute col for image n, group g: (patch, H_out * W_out)
+      Tensor col_ng({patch, H_out * W_out});
+      float* cp = col_ng.data();
+      const float* ip = input_cache.data();
+      for (int64_t c = 0; c < C_in_g; ++c) {
+        int64_t c_actual = g * C_in_g + c;
+        for (int64_t kh = 0; kh < kH; ++kh) {
+          for (int64_t kw = 0; kw < kW; ++kw) {
+            for (int64_t oh = 0; oh < H_out; ++oh) {
+              for (int64_t ow = 0; ow < W_out; ++ow) {
+                int64_t ih = oh * stride - padding + kh;
+                int64_t iw = ow * stride - padding + kw;
+                int64_t col_row = c * kH * kW + kh * kW + kw;
+                int64_t col_col = oh * W_out + ow;
+                int64_t col_i = col_row * (H_out * W_out) + col_col;
+                if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
+                  cp[col_i] = 0.0f;
+                } else {
+                  int64_t in_i = n*(C_in*H*W) + c_actual*(H*W) + ih*W + iw;
+                  cp[col_i] = ip[in_i];
+                }
               }
             }
           }
         }
       }
-    }
 
-    // grad_weight += grad_out_n @ col_n.T
-    grad_w = add(grad_w, matmul(grad_out_n, transpose(col_n, 0, 1)));
-    // grad_col_n = w.T @ grad_out_n: (CkHkW, H_out*W_out)
-    Tensor grad_col_n = matmul(transpose(w, 0, 1), grad_out_n);
-    const float* gcp = grad_col_n.data();
+      // grad_w_g += grad_out_ng @ col_ng.T: (C_out_g, patch)
+      Tensor grad_w_g = matmul(grad_out_ng, transpose(col_ng, 0, 1));
+      // accumulate into the right row band of grad_w
+      const float* gwgp = grad_w_g.data();
+      for (int64_t r = 0; r < C_out_g; ++r) {
+        for (int64_t i = 0; i < patch; ++i) {
+          gwp[(g * C_out_g + r) * patch + i] += gwgp[r * patch + i];
+        }
+      }
 
-    // col2im: scatter grad_col_n back to grad_input
-    for (int64_t c = 0; c < C_in; ++c) {
-      for (int64_t kh = 0; kh < kH; ++kh) {
-        for (int64_t kw = 0; kw < kW; ++kw) {
-          for (int64_t oh = 0; oh < H_out; ++oh) {
-            for (int64_t ow = 0; ow < W_out; ++ow) {
-              int64_t ih = oh * stride - padding + kh;
-              int64_t iw = ow * stride - padding + kw;
-              if (ih < 0 || ih >= H || iw < 0 || iw >= W) continue; // out of bounds
+      // grad_col_ng = w_g.T @ grad_out_ng: (patch, H_out*W_out)
+      Tensor grad_col_ng = matmul(transpose(w_groups[g], 0, 1), grad_out_ng);
+      const float* gcp = grad_col_ng.data();
 
-              int64_t col_row = c * kH * kW + kh * kW + kw;
-              int64_t col_col = oh * W_out + ow;
-              int64_t col_i = col_row * (H_out * W_out) + col_col;
-              int64_t in_i = n * (C_in * H * W) + c * (H * W) + ih * W + iw;
+      // col2im: scatter grad_col_ng back to grad_input
+      for (int64_t c = 0; c < C_in_g; ++c) {
+        int64_t c_actual = g * C_in_g + c;
+        for (int64_t kh = 0; kh < kH; ++kh) {
+          for (int64_t kw = 0; kw < kW; ++kw) {
+            for (int64_t oh = 0; oh < H_out; ++oh) {
+              for (int64_t ow = 0; ow < W_out; ++ow) {
+                int64_t ih = oh * stride - padding + kh;
+                int64_t iw = ow * stride - padding + kw;
+                if (ih < 0 || ih >= H || iw < 0 || iw >= W) continue; // out of bounds
 
-              gi[in_i] += gcp[col_i];
+                int64_t col_row = c * kH * kW + kh * kW + kw;
+                int64_t col_col = oh * W_out + ow;
+                int64_t col_i = col_row * (H_out * W_out) + col_col;
+                int64_t in_i = n * (C_in * H * W) + c_actual * (H * W) + ih * W + iw;
+
+                gi[in_i] += gcp[col_i];
+              }
             }
           }
         }
