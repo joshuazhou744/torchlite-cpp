@@ -154,7 +154,7 @@ public:
 class Conv2dBackward: public GradFunction {
 public:
   Tensor weight_cache;
-  Tensor col_cache;
+  Tensor input_cache;
   int64_t stride, padding;
   int64_t N, C_in, H, W;
   void backward(const Tensor& grad_output) override;

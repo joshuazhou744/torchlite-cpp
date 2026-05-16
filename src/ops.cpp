@@ -912,14 +912,16 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
   const int64_t H_out = (H + 2 * padding - kH) / stride + 1;
   const int64_t W_out = (W + 2 * padding - kW) / stride + 1;
 
-  // im2col: (N, C_in * kH * kW, H_out * W_out)
-  Tensor col({N, C_in * kH * kW, H_out * W_out});
-  // col tensor data that we'll use to weight @ col -> (C_out, H_out * W_out)
-  // holds every input patch (flattened)
-  float* cp = col.data();
+  // weight: (C_out, C_in, kH, kW)
+  // col: (C_in * kH * kW, H_out * W_out)
+  Tensor w = reshape(weight, {C_out, C_in*kH*kW});
+  Tensor out({N, C_out, H_out*W_out});
   const float* ip = input.data();
 
   for (int64_t n = 0; n < N; ++n) { // iterate over images in a batch
+    // im2col for image n only: (C_in*kH*kW, H_out*W_out)
+    Tensor col_n({C_in * kH * kW, H_out * W_out});
+    float* cp = col_n.data();
     for (int64_t c = 0; c < C_in; ++c) { // iterate over each input channel
       for (int64_t kh = 0; kh < kH; ++kh) { // iterate over each kernel row
         for (int64_t kw = 0; kw < kW; ++kw) { // iterate over each kernel col
@@ -934,7 +936,7 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
               int64_t col_col = oh * W_out + ow;
 
               // flat index into col
-              int64_t col_i = n*(C_in*kH*kW*H_out*W_out) + col_row*(H_out*W_out) + col_col;
+              int64_t col_i = col_row*(H_out*W_out) + col_col;
 
               if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
                 cp[col_i] = 0.0f; // padding
@@ -947,23 +949,14 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
         }
       }
     }
-  }
 
-  // weight: (C_out, C_in, kH, kW)
-  // col: (N, C_in * kH * kW, H_out * W_out)
-  Tensor w = reshape(weight, {C_out, C_in*kH*kW});
-  Tensor out({N, C_out, H_out*W_out});
-
-  // matmul per image: w @ col[n] -> (C_out, H_out * W_out)
-  for (int64_t n = 0; n < N; ++n) {
-    Tensor col_n = reshape(slice(col, 0, n, n+1), {C_in*kH*kW, H_out*W_out});
+    // matmul per image: w @ col[n] -> (C_out, H_out * W_out)
     Tensor out_n = matmul(w, col_n);
     // copy into out[n]
-    float* op = out.data() + n * C_out * H_out * W_out; // offset to the nth image
+    float* op = out.data() + n * C_out * H_out * W_out;
     const float* onp = out_n.data();
     for (int64_t i = 0; i < C_out * H_out * W_out; ++i) op[i] = onp[i];
   }
-
   Tensor result = reshape(out, {N, C_out, H_out, W_out});
 
   // add bias
@@ -974,7 +967,7 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
   if (input.requires_grad || weight.requires_grad) {
     if (auto fn = track<Conv2dBackward>(result, {&input, &weight, &bias})) {
       fn->weight_cache = weight.contiguous();
-      fn->col_cache = col;
+      fn->input_cache = input.contiguous();
       fn->stride = stride;
       fn->padding = padding;
       fn->N = N;

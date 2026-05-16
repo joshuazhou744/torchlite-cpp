@@ -349,7 +349,32 @@ void Conv2dBackward::backward(const Tensor& grad_output) {
     // grad_out_n: (C_out, H_out*W_out)
     Tensor grad_out_n = reshape(slice(go, 0, n, n+1), {C_out, H_out*W_out});
     // col_n: (CkHkW, H_out*W_out)
-    Tensor col_n = reshape(slice(col_cache, 0, n, n+1), {CkHkW, H_out*W_out});
+    // recompute col_n from cached input
+    Tensor col_n({CkHkW, H_out * W_out});
+    float* cp = col_n.data();
+    const float* ip = input_cache.data();
+    for (int64_t c = 0; c < C_in; ++c) {
+      for (int64_t kh = 0; kh < kH; ++kh) {
+        for (int64_t kw = 0; kw < kW; ++kw) {
+          for (int64_t oh = 0; oh < H_out; ++oh) {
+            for (int64_t ow = 0; ow < W_out; ++ow) {
+              int64_t ih = oh * stride - padding + kh;
+              int64_t iw = ow * stride - padding + kw;
+              int64_t col_row = c * kH * kW + kh * kW + kw;
+              int64_t col_col = oh * W_out + ow;
+              int64_t col_i = col_row * (H_out * W_out) + col_col;
+              if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
+                cp[col_i] = 0.0f;
+              } else {
+                int64_t in_i = n*(C_in*H*W) + c*(H*W) + ih*W + iw;
+                cp[col_i] = ip[in_i];
+              }
+            }
+          }
+        }
+      }
+    }
+
     // grad_weight += grad_out_n @ col_n.T
     grad_w = add(grad_w, matmul(grad_out_n, transpose(col_n, 0, 1)));
     // grad_col_n = w.T @ grad_out_n: (CkHkW, H_out*W_out)
