@@ -116,9 +116,9 @@ std::vector<Tensor*> LayerNorm::parameters() {
 // Dropout layer
 // not needed because we are using torchlite for inference only, will keep here just in case
 Dropout::Dropout(float p) : p_(p) {}
-Tensor Dropout::forward(const Tensor& input, bool training) const {
+Tensor Dropout::forward(const Tensor& input) const {
   Tensor a = input.contiguous();
-  if (!training || p_ == 0.0f) {
+  if (!training_ || p_ == 0.0f) {
     return a;
   }
 
@@ -216,7 +216,9 @@ TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_he
     ff1_(d_model, d_ff),
     ff2_(d_ff, d_model),
     dropout_(dropout_p)
-{}
+{
+  dropout_.set_training(false);
+}
 
 // get Transformer encoder layer parameters (aggregate of msa, norm and feed-forward layers)
 std::vector<Tensor*> TransformerEncoderLayer::parameters() {
@@ -236,14 +238,14 @@ std::vector<Tensor*> TransformerEncoderLayer::parameters() {
 Tensor TransformerEncoderLayer::forward(const Tensor& input) const {
   // self-attention block with residuals
   Tensor attn_out = msa_.forward(input);
-  attn_out = dropout_.forward(attn_out, false); // inert dropout
+  attn_out = dropout_.forward(attn_out); // inert dropout
   Tensor x = norm1_.forward(add(input, attn_out)); // add residual (input)
 
   // feed-forward block with residuals
   Tensor ff_out = ff1_.forward(x);
   ff_out = gelu(ff_out);
   ff_out = ff2_.forward(ff_out);
-  ff_out = dropout_.forward(ff_out, false); // inert dropout
+  ff_out = dropout_.forward(ff_out); // inert dropout
   return norm2_.forward(add(x, ff_out)); // add residual to output
 }
 

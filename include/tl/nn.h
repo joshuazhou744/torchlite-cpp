@@ -80,13 +80,18 @@ private:
 };
 
 // Dropout: turn random elements to zero during training
-class Dropout {
+class Dropout: public Module {
 public:
   Dropout(float p = 0.1f);
-  Tensor forward(const Tensor& input, bool training = true) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return {}; }
+
+  void set_training(bool t) { training_ = t; }
+  bool training() const { return training_; }
 
 private:
   float p_; // zeroing probability (dropout rate)
+  bool training_ = true;
 };
 
 // MultiHeadAttention: split input into parallel attention heads
