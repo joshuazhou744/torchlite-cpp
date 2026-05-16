@@ -60,6 +60,62 @@ void test_nn() {
   row0_var /= 4.0f;
   assert(is_close_nn(row0_var, 1.0f, 1e-4));
 
+  // test BatchNorm2d: each channel output should have mean ~0 and variance ~1
+  // input (N=2, C=3, H=2, W=2): fill each channel with a distinct scale to ensure
+  // channels normalize independently (channel 0 in [1..8], channel 1 in [10..80],
+  // channel 2 in [100..800]). post-norm, all channels collapse to mean 0, var 1.
+  tl::nn::BatchNorm2d bn(3);
+  tl::Tensor bn_in({2, 3, 2, 2});
+  for (int64_t n = 0; n < 2; ++n) {
+    for (int64_t c = 0; c < 3; ++c) {
+      for (int64_t h = 0; h < 2; ++h) {
+        for (int64_t w = 0; w < 2; ++w) {
+          int64_t idx = n*12 + c*4 + h*2 + w;     // flat (N,C,H,W) index
+          int64_t pos = n*4 + h*2 + w;            // 0..7 position within this channel
+          float scale = (c == 0) ? 1.0f : (c == 1 ? 10.0f : 100.0f);
+          bn_in.data()[idx] = scale * (pos + 1);
+        }
+      }
+    }
+  }
+
+  tl::Tensor bn_out = bn.forward(bn_in);
+  assert(bn_out.sizes().size() == 4);
+  assert(bn_out.sizes()[0] == 2);
+  assert(bn_out.sizes()[1] == 3);
+  assert(bn_out.sizes()[2] == 2);
+  assert(bn_out.sizes()[3] == 2);
+
+  // per-channel statistics check (reduce over N, H, W; keep channel separate)
+  for (int64_t c = 0; c < 3; ++c) {
+    float ch_vals[8];
+    float ch_mean = 0.0f;
+    int64_t k = 0;
+    for (int64_t n = 0; n < 2; ++n) {
+      for (int64_t h = 0; h < 2; ++h) {
+        for (int64_t w = 0; w < 2; ++w) {
+          int64_t idx = n*12 + c*4 + h*2 + w;
+          ch_vals[k] = bn_out.data()[idx];
+          ch_mean += ch_vals[k];
+          ++k;
+        }
+      }
+    }
+    ch_mean /= 8.0f;
+    assert(is_close_nn(ch_mean, 0.0f, 1e-4));
+
+    float ch_var = 0.0f;
+    for (int i = 0; i < 8; ++i) ch_var += (ch_vals[i] - ch_mean) * (ch_vals[i] - ch_mean);
+    ch_var /= 8.0f;
+    assert(is_close_nn(ch_var, 1.0f, 1e-3)); // small slack for the eps term inside BN
+  }
+
+  // parameter count: gamma and beta, each shape [C]
+  auto bn_params = bn.parameters();
+  assert(bn_params.size() == 2);
+  assert(bn_params[0]->numel() == 3);
+  assert(bn_params[1]->numel() == 3);
+
   // test MultiHeadAttention: shape check
   tl::nn::MultiHeadAttention msa(16, 4); // d_model=16, 4 heads of dim 4
   tl::Tensor msa_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]

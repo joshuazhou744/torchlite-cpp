@@ -198,5 +198,23 @@ private:
   int64_t kernel_size_, stride_, padding_;
 };
 
+// BatchNorm2d: normalize per channel across (N, H, W)
+class BatchNorm2d: public Module {
+public:
+  BatchNorm2d(int64_t num_channels, float eps = 1e-5);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_gamma(const Tensor& g) { gamma_ = g; }
+  void set_beta(const Tensor& b) { beta_ = b; }
+  const Tensor& gamma() const { return gamma_; }
+  const Tensor& beta() const { return beta_; }
+
+private:
+  Tensor gamma_; // learnable scale
+  Tensor beta_; // learnable shift
+  int64_t num_channels_;
+  float eps_;
+};
+
 } // nn
 } // tl

@@ -292,5 +292,44 @@ Tensor PositionalEncoding::forward(const Tensor& input) const {
   return add(input, pe_slice); // broadcast add accross batch
 }
 
+// Batch norm 2D
+BatchNorm2d::BatchNorm2d(int64_t num_channels, float eps)
+  : gamma_(ones({num_channels})),
+    beta_(zeros({num_channels})),
+    num_channels_(num_channels),
+    eps_(eps)
+{
+  gamma_.set_requires_grad(true);
+  beta_.set_requires_grad(true);
+}
+
+Tensor BatchNorm2d::forward(const Tensor& input) const {
+  // input: (N, C, H, W) -> reduce dims with keepdim -> (1, C, 1, 1)
+  // get per-channel mean
+  Tensor m = mean(input, 0, true);
+  m = mean(m, 2, true);
+  m = mean(m, 3, true);
+
+  // per-channel variance
+  Tensor diff = sub(input, m);
+  Tensor sq = mul(diff, diff);
+  Tensor v = mean(sq, 0, true);
+  v = mean(v, 2, true);
+  v = mean(v, 3, true);
+
+  // normalize: (x - mu) / sqrt(var + eps)
+  Tensor denom = sqrt(add(v, full(v.sizes(), eps_)));
+  Tensor normed = div(diff, denom);
+
+  // learnable scale and shift
+  Tensor g = reshape(gamma_, {1, num_channels_, 1, 1});
+  Tensor b = reshape(beta_, {1, num_channels_, 1, 1});
+  return add(mul(normed, g), b);
+}
+
+std::vector<Tensor*> BatchNorm2d::parameters() {
+  return {&gamma_, &beta_};
+}
+
 }
 }
