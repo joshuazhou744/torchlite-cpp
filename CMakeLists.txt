@@ -65,3 +65,7 @@ target_link_libraries(spiral_mlp PRIVATE torchlite)
 # create pattern cnn example
 add_executable(pattern_cnn examples/pattern_cnn.cpp)
 target_link_libraries(pattern_cnn PRIVATE torchlite)
+
+# create mnist cnn example
+add_executable(mnist_cnn examples/mnist_cnn.cpp)
+target_link_libraries(mnist_cnn PRIVATE torchlite)

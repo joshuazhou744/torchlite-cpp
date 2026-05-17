@@ -175,6 +175,12 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class DropoutBackward: public GradFunction {
+public:
+  Tensor mask_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
 // Helper functions
 
 template<typename BackwardFn>

@@ -20,8 +20,15 @@ static void accumulate_grad(Tensor& t, const Tensor& grad) {
 }
 
 static Tensor sum_to(Tensor grad, const std::vector<int64_t>& target_shape) {
+  // reduce ndim by summing leading dims not in target
   while (grad.sizes().size() > target_shape.size()) {
     grad = sum(grad, 0, false);
+  }
+  // for each remaining dim where target > 1 but grad > 1, sum along that dim
+  for (size_t i = 0; i < target_shape.size(); ++i) {
+    if (target_shape[i] == 1 && grad.sizes()[i] != 1) {
+      grad = sum(grad, static_cast<int64_t>(i), true);
+    }
   }
   return grad;
 }
@@ -117,20 +124,20 @@ void TransposeBackward::backward(const Tensor& grad_output) {
 }
 
 void MulBackward::backward(const Tensor& grad_output) {
-  accumulate_grad(inputs[0], mul(grad_output, b_cache));
-  accumulate_grad(inputs[1], mul(grad_output, a_cache));
+  accumulate_grad(inputs[0], sum_to(mul(grad_output, b_cache), inputs[0].sizes()));
+  accumulate_grad(inputs[1], sum_to(mul(grad_output, a_cache), inputs[1].sizes()));
 }
 
 void DivBackward::backward(const Tensor& grad_output) {
   // z = a / b
   // d_a = grad / b
-  accumulate_grad(inputs[0], div(grad_output, b_cache));
+  accumulate_grad(inputs[0], sum_to(div(grad_output, b_cache), inputs[0].sizes()));
 
   // d_b = -grad * a / (b^2)
   Tensor b_sq = mul(b_cache, b_cache);
   Tensor num = mul(grad_output, a_cache);
   Tensor grad_b = neg(div(num, b_sq));
-  accumulate_grad(inputs[1], grad_b);
+  accumulate_grad(inputs[1], sum_to(grad_b, inputs[1].sizes()));
 }
 
 void SigmoidBackward::backward(const Tensor& grad_output) {
@@ -494,6 +501,12 @@ void AvgPool2dBackward::backward(const Tensor& grad_output) {
     }
   }
   accumulate_grad(inputs[0], input_grad);
+}
+
+void DropoutBackward::backward(const Tensor& grad_output) {
+  // dropout in forward: y = x * mask_scale (0s and scale mask)
+  // dy/dx = mask_scale (element-wise)
+  accumulate_grad(inputs[0], mul(grad_output, mask_cache));
 }
 
 } // tl

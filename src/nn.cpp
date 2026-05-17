@@ -2,6 +2,7 @@
 #include <tl/ops.h>
 #include <tl/factory.h>
 #include <tl/activation.h>
+#include <tl/autograd.h>
 
 #include <random>
 #include <cmath>
@@ -123,8 +124,10 @@ Tensor Dropout::forward(const Tensor& input) const {
   }
 
   Tensor out(a.sizes());
+  Tensor mask_scale(a.sizes());
   const float* ap = a.data();
   float* op = out.data();
+  float* mp = mask_scale.data();
 
   std::mt19937 gen(std::random_device{}());
   std::uniform_real_distribution<float> dist(0.0f, 1.0f);
@@ -132,7 +135,15 @@ Tensor Dropout::forward(const Tensor& input) const {
   float scale = 1.0f / (1.0f - p_);
   const int64_t n = a.numel();
   for (int64_t i = 0; i < n; ++i) {
-    op[i] = (dist(gen) < p_) ? 0.0f : ap[i] * scale;
+    float m = (dist(gen) < p_) ? 0.0f : scale;
+    mp[i] = m;
+    op[i] = ap[i] * m;
+  }
+
+  if (input.requires_grad) {
+    if (auto fn = track<DropoutBackward>(out, {&input})) {
+      fn->mask_cache = mask_scale;
+    }
   }
   return out;
 }
