@@ -17,7 +17,8 @@ struct WavData {
 WavData load_wav(const std::string& path);
 
 // compute mel spectrogram from audio samples, convert to Tensor[1, frames, n_mels]
-Tensor mel_spectrogram(const std::vector<float>& samples,
+// samples is non-const because the underlying librosa-cpp call requires non-const ref
+Tensor mel_spectrogram(std::vector<float>& samples,
                         int sr = 16000,
                         int n_fft = 400,
                         int n_hop = 160,
