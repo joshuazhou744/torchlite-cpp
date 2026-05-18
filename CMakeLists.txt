@@ -33,8 +33,16 @@ target_include_directories(torchlite
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# build tests flag
-option(BUILD_TESTS "Build tests" ON)
+# build tests/examples only when torchlite is the top-level project by default
+# (so downstream consumers via FetchContent/add_subdirectory don't build them)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(TORCHLITE_TOP_LEVEL ON)
+else()
+  set(TORCHLITE_TOP_LEVEL OFF)
+endif()
+
+option(BUILD_TESTS "Build tests" ${TORCHLITE_TOP_LEVEL})
+option(BUILD_EXAMPLES "Build examples" ${TORCHLITE_TOP_LEVEL})
 
 if(BUILD_TESTS)
   # create single test executable
@@ -53,19 +61,16 @@ if(BUILD_TESTS)
   target_link_libraries(run_tests PRIVATE torchlite)
 endif()
 
+if(BUILD_EXAMPLES)
+  add_executable(linear_regression examples/linear_regression.cpp)
+  target_link_libraries(linear_regression PRIVATE torchlite)
 
-# create linear regression example
-add_executable(linear_regression examples/linear_regression.cpp)
-target_link_libraries(linear_regression PRIVATE torchlite)
+  add_executable(spiral_mlp examples/spiral_mlp.cpp)
+  target_link_libraries(spiral_mlp PRIVATE torchlite)
 
-# create spiral mlp example
-add_executable(spiral_mlp examples/spiral_mlp.cpp)
-target_link_libraries(spiral_mlp PRIVATE torchlite)
+  add_executable(pattern_cnn examples/pattern_cnn.cpp)
+  target_link_libraries(pattern_cnn PRIVATE torchlite)
 
-# create pattern cnn example
-add_executable(pattern_cnn examples/pattern_cnn.cpp)
-target_link_libraries(pattern_cnn PRIVATE torchlite)
-
-# create mnist cnn example
-add_executable(mnist_cnn examples/mnist_cnn.cpp)
-target_link_libraries(mnist_cnn PRIVATE torchlite)
+  add_executable(mnist_cnn examples/mnist_cnn.cpp)
+  target_link_libraries(mnist_cnn PRIVATE torchlite)
+endif()
