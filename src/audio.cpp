@@ -88,7 +88,7 @@ WavData load_wav(const std::string& path) {
 }
 
 // take raw audio samples and return a tensor of audio sample
-Tensor mel_spectrogram(const std::vector<float>& samples, int sr, int n_fft, int n_hop, int n_mels) {
+Tensor mel_spectrogram(std::vector<float>& samples, int sr, int n_fft, int n_hop, int n_mels) {
   // compute mel spectrogram using librosacpp
   std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(
       samples,

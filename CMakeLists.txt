@@ -16,6 +16,7 @@ add_library(torchlite
     src/loss.cpp
     src/optim.cpp
     src/model_io.cpp
+    src/audio.cpp
 )
 
 # Eigen library link
