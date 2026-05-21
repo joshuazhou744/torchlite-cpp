@@ -311,32 +311,41 @@ static inline void micro_kernel_8x8(const float* a, const float* b, float* c, in
 
 // register-tiled kernel, N = 8
 static void gemm_tiled(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
-  const int64_t T = 64;
+#if TL_HAVE_NEON
+  const int64_t MR = 8, NR = 8;
 
-  // zero the output once up front, kk loop accumulates into each tile
-  // across many steps, so we cannot zero per row like naive kernel
+  // zero once: micro-kernel overwrites its tiles but the remainder code accumulates
   for (int64_t i = 0; i < M * N; ++i) out[i] = 0.0f;
 
-  // outer loops: step over output tiles and slices of the contraction dim, K
-  for (int64_t mm = 0; mm < M; mm += T) {
-    int64_t m_end = std::min(mm + T, M);
-    for (int64_t nn = 0; nn < N; nn += T) {
-      int64_t n_end = std::min(nn + T, N);
-      for (int64_t kk = 0; kk < K; kk += T) {
-        int64_t k_end = std::min(kk + T, K);
-
-        // inner loops: regular matmul on tiles
-        for (int64_t m = mm; m < m_end; ++m) {
-          for (int64_t k = kk; k < k_end; ++k) {
-            float a_val = a[m * K + k];
-            for (int64_t n = nn; n < n_end; ++n) {
-              out[m * N + n] += a_val * b[k * N + n];
-            }
-          }
+  int64_t m = 0;
+  for (; m + MR <= M; m += MR) {
+    int64_t n = 0;
+    for (; n + NR <= N; n += NR) {
+      micro_kernel_8x8(a + m * K, b + n, out + m * N + n, K, N);
+    }
+    // leftover columns (n..N)
+    for (int64_t mi = m; mi < m + MR; ++mi) {
+      for (int64_t k = 0; k < K; ++k) {
+        float a_val = a[mi * K + k];
+        for (int64_t nj = n; nj < N; ++nj) {
+          out[mi * N + nj] += a_val * b[k * N + nj];
         }
       }
     }
   }
+
+  // leftover rows (m..M)
+  for (int64_t mi = m; mi < M; ++mi) {
+    for (int64_t k = 0; k < K; ++k) {
+      float a_val = a[mi * K + k];
+      for (int64_t nj = 0; nj < N; ++nj) {
+        out[mi * N + nj] += a_val * b[k * N + nj];
+      }
+    }
+  }
+#else
+    gemm_blocked(a, b, out, M, N, K);
+#endif
 }
 
 // matrix multiplication
@@ -403,7 +412,7 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     const float* bp = b.data() + index_b;
     float* op = out.data() + (i * M * N);
 
-    gemm_blocked(ap, bp, op, M, N, K);
+    gemm_tiled(ap, bp, op, M, N, K);
   }
 
   Tensor result = out;

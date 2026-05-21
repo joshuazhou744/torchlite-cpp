@@ -41,21 +41,27 @@ double time_best(Fn&& fn, int warmup, int iters) {
 double measure_peak_gflops() {
   const int64_t iters = 300'000'000;
 #if TL_HAVE_NEON
-  const int N = 16;                              // accumulators, 4 fp32 lanes each
-  float32x4_t acc[N];
-  for (int i = 0; i < N; ++i) acc[i] = vdupq_n_f32(0.01f * (i + 1));
+  const int N = 16; // accumulators, 4 fp32 lanes each
+  float32x4_t c0=vdupq_n_f32(0.01f),  c1=vdupq_n_f32(0.02f),  c2=vdupq_n_f32(0.03f), c3=vdupq_n_f32(0.04f);
+  float32x4_t c4=vdupq_n_f32(0.05f),  c5=vdupq_n_f32(0.06f),  c6=vdupq_n_f32(0.07f), c7=vdupq_n_f32(0.08f);
+  float32x4_t c8=vdupq_n_f32(0.09f),  c9=vdupq_n_f32(0.10f),  c10=vdupq_n_f32(0.11f), c11=vdupq_n_f32(0.12f);
+  float32x4_t c12=vdupq_n_f32(0.13f), c13=vdupq_n_f32(0.14f), c14=vdupq_n_f32(0.15f), c15=vdupq_n_f32(0.16f);
   const float32x4_t a = vdupq_n_f32(0.9999999f); // <1 keeps the chain bounded
   const float32x4_t b = vdupq_n_f32(0.0000001f);
 
+
   auto t0 = clk::now();
-  for (int64_t it = 0; it < iters; ++it)
-    for (int i = 0; i < N; ++i) acc[i] = vfmaq_f32(b, a, acc[i]); // b + a*acc
+  for (int64_t it = 0; it < iters; ++it) {
+    c0 =vfmaq_f32(b,a,c0);  c1 =vfmaq_f32(b,a,c1);  c2 =vfmaq_f32(b,a,c2);  c3 =vfmaq_f32(b,a,c3);
+    c4 =vfmaq_f32(b,a,c4);  c5 =vfmaq_f32(b,a,c5);  c6 =vfmaq_f32(b,a,c6);  c7=vfmaq_f32(b,a,c7);
+    c8 =vfmaq_f32(b,a,c8);  c9 =vfmaq_f32(b,a,c9);  c10=vfmaq_f32(b,a,c10); c11=vfmaq_f32(b,a,c11);
+    c12=vfmaq_f32(b,a,c12); c13=vfmaq_f32(b,a,c13); c14=vfmaq_f32(b,a,c14); c15=vfmaq_f32(b,a,c15);
+  }
   auto t1 = clk::now();
 
-  float32x4_t s = acc[0];                         // reduce so nothing is dead code
-  for (int i = 1; i < N; ++i) s = vaddq_f32(s, acc[i]);
-  g_sink = vgetq_lane_f32(s, 0) + vgetq_lane_f32(s, 1)
-         + vgetq_lane_f32(s, 2) + vgetq_lane_f32(s, 3);
+  float32x4_t s = vaddq_f32(vaddq_f32(vaddq_f32(c0,c1), vaddq_f32(c2,c3)), vaddq_f32(vaddq_f32(c4,c5), vaddq_f32(c6,c7)));
+  s = vaddq_f32(s, vaddq_f32(vaddq_f32(vaddq_f32(c8,c9), vaddq_f32(c10,c11)), vaddq_f32(vaddq_f32(c12,c13), vaddq_f32(c14,c15))));
+  g_sink = vgetq_lane_f32(s,0)+vgetq_lane_f32(s,1)+vgetq_lane_f32(s,2)+vgetq_lane_f32(s,3);
 
   double secs  = std::chrono::duration<double>(t1 - t0).count();
   double flops = (double)iters * N * 4 /*lanes*/ * 2 /*mul+add*/;
