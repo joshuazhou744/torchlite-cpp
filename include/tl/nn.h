@@ -39,7 +39,7 @@ public:
   const Tensor& bias() const { return bias_; }
 
 private:
-  Tensor weight_; // shape: [out_features, in_features]
+  Tensor weight_; // shape: [in_features, out_features], pre-transposed
   Tensor bias_; // shape: [out_features]
   bool use_bias_;
 };

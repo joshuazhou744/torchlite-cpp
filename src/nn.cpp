@@ -35,7 +35,7 @@ std::vector<Tensor*> Sequential::parameters() {
 
 // Linear layer
 Linear::Linear(int64_t in_features, int64_t out_features, bool use_bias)
-  : weight_(scale(randn({out_features, in_features}), std::sqrt(2.0f / in_features))),
+  : weight_(scale(randn({in_features, out_features}), std::sqrt(2.0f / in_features))),
     bias_(zeros({out_features})),
     use_bias_(use_bias)
 {
@@ -44,7 +44,7 @@ Linear::Linear(int64_t in_features, int64_t out_features, bool use_bias)
 }
 
 Tensor Linear::forward(const Tensor& input) const {
-  Tensor out = matmul(input, transpose(weight_, 0, 1)); // xW^T
+  Tensor out = matmul(input, weight_); // x @ W, W is pre-transposed
   if (use_bias_) {
     out = add(out, bias_); // + bias
   }
