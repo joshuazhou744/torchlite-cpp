@@ -8,6 +8,13 @@
 #include <cmath> // for sqrt() and exp()
 #include <limits> // for infinity
 
+#if defined(__aarch64__) || defined(__ARM_NEON)
+  #include <arm_neon.h>
+  #define TL_HAVE_NEON 1
+#else
+  #define TL_HAVE_NEON 0
+#endif
+
 namespace tl {
 
 // helper function to validate two tensors have same shape
@@ -227,6 +234,83 @@ static void gemm_naive(const float* a, const float* b, float* out, int64_t M, in
 
 // cache-blocked kernel, T = 64
 static void gemm_blocked(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
+  const int64_t T = 64;
+
+  // zero the output once up front, kk loop accumulates into each tile
+  // across many steps, so we cannot zero per row like naive kernel
+  for (int64_t i = 0; i < M * N; ++i) out[i] = 0.0f;
+
+  // outer loops: step over output tiles and slices of the contraction dim, K
+  for (int64_t mm = 0; mm < M; mm += T) {
+    int64_t m_end = std::min(mm + T, M);
+    for (int64_t nn = 0; nn < N; nn += T) {
+      int64_t n_end = std::min(nn + T, N);
+      for (int64_t kk = 0; kk < K; kk += T) {
+        int64_t k_end = std::min(kk + T, K);
+
+        // inner loops: regular matmul on tiles
+        for (int64_t m = mm; m < m_end; ++m) {
+          for (int64_t k = kk; k < k_end; ++k) {
+            float a_val = a[m * K + k];
+            for (int64_t n = nn; n < n_end; ++n) {
+              out[m * N + n] += a_val * b[k * N + n];
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// register-tiled micro kernel
+#if TL_HAVE_NEON
+// NEON: piece of hardware that is a SIMD (Single instruction multiple data) unit
+// compute one 8x8 tile of C = A_panel * B_panel entirely in registers
+// a: top left of the 8-row A panel -> a[row*K + k]
+// b: top left of the 8-col B panel -> b[k*N + col]
+// c: top left of the 8x8 C tile
+// loops the full K so accumulators never leave registers, write C once
+static inline void micro_kernel_8x8(const float* a, const float* b, float* c, int64_t K, int64_t N) {
+  // 8 rows x (8 cols = 2 NEON vectors) = 16 accumulator registers
+  float32x4_t c0l = vdupq_n_f32(0.0f), c0r = vdupq_n_f32(0.0f);
+  float32x4_t c1l = vdupq_n_f32(0.0f), c1r = vdupq_n_f32(0.0f);
+  float32x4_t c2l = vdupq_n_f32(0.0f), c2r = vdupq_n_f32(0.0f);
+  float32x4_t c3l = vdupq_n_f32(0.0f), c3r = vdupq_n_f32(0.0f);
+  float32x4_t c4l = vdupq_n_f32(0.0f), c4r = vdupq_n_f32(0.0f);
+  float32x4_t c5l = vdupq_n_f32(0.0f), c5r = vdupq_n_f32(0.0f);
+  float32x4_t c6l = vdupq_n_f32(0.0f), c6r = vdupq_n_f32(0.0f);
+  float32x4_t c7l = vdupq_n_f32(0.0f), c7r = vdupq_n_f32(0.0f);
+
+  for (int64_t k = 0; k < K; ++k) {
+    // load 8 columns of B at row k: two contiguous 4-float vectors
+    float32x4_t bl = vld1q_f32(b + k * N + 0);   // cols 0..3
+    float32x4_t br = vld1q_f32(b + k * N + 4);   // cols 4..7
+
+    // broadcast each row's A value and FMA into that row's accumulators
+    float a0 = a[0*K + k]; c0l = vfmaq_n_f32(c0l, bl, a0); c0r = vfmaq_n_f32(c0r, br, a0);
+    float a1 = a[1*K + k]; c1l = vfmaq_n_f32(c1l, bl, a1); c1r = vfmaq_n_f32(c1r, br, a1);
+    float a2 = a[2*K + k]; c2l = vfmaq_n_f32(c2l, bl, a2); c2r = vfmaq_n_f32(c2r, br, a2);
+    float a3 = a[3*K + k]; c3l = vfmaq_n_f32(c3l, bl, a3); c3r = vfmaq_n_f32(c3r, br, a3);
+    float a4 = a[4*K + k]; c4l = vfmaq_n_f32(c4l, bl, a4); c4r = vfmaq_n_f32(c4r, br, a4);
+    float a5 = a[5*K + k]; c5l = vfmaq_n_f32(c5l, bl, a5); c5r = vfmaq_n_f32(c5r, br, a5);
+    float a6 = a[6*K + k]; c6l = vfmaq_n_f32(c6l, bl, a6); c6r = vfmaq_n_f32(c6r, br, a6);
+    float a7 = a[7*K + k]; c7l = vfmaq_n_f32(c7l, bl, a7); c7r = vfmaq_n_f32(c7r, br, a7);
+  }
+
+  // write the 8x8 tile back to C
+  vst1q_f32(c + 0*N + 0, c0l); vst1q_f32(c + 0*N + 4, c0r);
+  vst1q_f32(c + 1*N + 0, c1l); vst1q_f32(c + 1*N + 4, c1r);
+  vst1q_f32(c + 2*N + 0, c2l); vst1q_f32(c + 2*N + 4, c2r);
+  vst1q_f32(c + 3*N + 0, c3l); vst1q_f32(c + 3*N + 4, c3r);
+  vst1q_f32(c + 4*N + 0, c4l); vst1q_f32(c + 4*N + 4, c4r);
+  vst1q_f32(c + 5*N + 0, c5l); vst1q_f32(c + 5*N + 4, c5r);
+  vst1q_f32(c + 6*N + 0, c6l); vst1q_f32(c + 6*N + 4, c6r);
+  vst1q_f32(c + 7*N + 0, c7l); vst1q_f32(c + 7*N + 4, c7r);
+}
+#endif
+
+// register-tiled kernel, N = 8
+static void gemm_tiled(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
   const int64_t T = 64;
 
   // zero the output once up front, kk loop accumulates into each tile
