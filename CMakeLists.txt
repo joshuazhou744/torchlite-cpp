@@ -44,6 +44,7 @@ endif()
 
 option(BUILD_TESTS "Build tests" ${TORCHLITE_TOP_LEVEL})
 option(BUILD_EXAMPLES "Build examples" ${TORCHLITE_TOP_LEVEL})
+option(BUILD_BENCH "Build benches" ${TORCHLITE_TOP_LEVEL})
 
 if(BUILD_TESTS)
   # create single test executable
@@ -74,4 +75,10 @@ if(BUILD_EXAMPLES)
 
   add_executable(mnist_cnn examples/mnist_cnn.cpp)
   target_link_libraries(mnist_cnn PRIVATE torchlite)
+endif()
+
+if(BUILD_BENCH)
+  add_executable(bench_matmul bench/bench_matmul.cpp)
+  target_link_libraries(bench_matmul PRIVATE torchlite)
+  target_compile_options(bench_matmul PRIVATE -O3 -march=native -DNDEBUG)
 endif()
