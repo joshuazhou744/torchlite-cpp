@@ -216,8 +216,10 @@ Tensor div(const Tensor& a, const Tensor& b) {
   return out;
 }
 
-// naive reference kernel
-// GEMM = GEneneral Matrix Multiply (BLAS name)
+// GEMM kernels: out[M,N] = a[M,K] * b[K,N]
+// Stages: scalar baseline -> cache blocking -> register tiling -> packing.
+
+// naive triple loop
 static void gemm_naive(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
   for (int64_t m = 0; m < M; ++m) {
     for (int64_t n = 0; n < N; ++n) {
@@ -232,12 +234,11 @@ static void gemm_naive(const float* a, const float* b, float* out, int64_t M, in
   }
 }
 
-// cache-blocked kernel, T = 64
+// 64x64 cache-blocked triple loop
 static void gemm_blocked(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
   const int64_t T = 64;
 
-  // zero the output once up front, kk loop accumulates into each tile
-  // across many steps, so we cannot zero per row like naive kernel
+  // zero up front: the kk loop accumulates into each tile across many steps
   for (int64_t i = 0; i < M * N; ++i) out[i] = 0.0f;
 
   // outer loops: step over output tiles and slices of the contraction dim, K
@@ -262,16 +263,12 @@ static void gemm_blocked(const float* a, const float* b, float* out, int64_t M, 
   }
 }
 
-// ============================================================================
-// register-tiled micro kernels (NEON = SIMD: Single Instruction, Multiple Data)
-// ============================================================================
+// REGISTER TILING: 8x8 NEON micro-kernels (16 vector regs)
 #if TL_HAVE_NEON
-// micro_kernel_8x8: compute one full 8x8 tile of C = A_panel * B_panel in registers.
-// a: top left of the 8-row A panel -> a[row*K + k]
-// b: top left of the 8-col B panel -> b[k*N + col]
+// micro_kernel_8x8: compute on full 8x8 tile of C = A_panel * B_panel in registers
+// a: top left of 8-row A panel -> a[row*K + k]
+// b: top left of 8-col B panel -> b[k*N + col]
 // c: top left of the 8x8 C tile
-// Loops the full K; accumulators stay in registers; writes C once (overwrite).
-// Fast path used by gemm_tiled (best measured throughput on this hardware).
 static inline void micro_kernel_8x8(const float* a, const float* b, float* c, int64_t K, int64_t N) {
   // 8 rows x (8 cols = 2 NEON vectors) = 16 accumulator registers
   float32x4_t c0l = vdupq_n_f32(0.0f), c0r = vdupq_n_f32(0.0f);
@@ -306,9 +303,8 @@ static inline void micro_kernel_8x8(const float* a, const float* b, float* c, in
   vst1q_f32(c + 7*N + 0, c7l); vst1q_f32(c + 7*N + 4, c7r);
 }
 
-// micro_kernel_8x8_acc: same 8x8 register tile, but ACCUMULATES a kc-deep slab
-// into C (load C -> FMA over kc -> store). Needed when K is blocked (KC), since
-// each output tile is then built from K/KC partial passes. Used by gemm_cache_blocked.
+// micro_kernel_8x8_acc: same 8x8 register tile, accumulates a kc-deep slab instead of entire row/col
+// accumulate: load C, FMA a kc-deep slab, store back
 static inline void micro_kernel_8x8_acc(const float* a, const float* b, float* c, int64_t kc, int64_t K, int64_t N) {
   // 8 rows x (8 cols = 2 NEON vectors) = 16 accumulator registers
   float32x4_t c0l = vld1q_f32(c + 0*N + 0), c0r = vld1q_f32(c + 0*N + 4);
@@ -348,9 +344,8 @@ static inline void micro_kernel_8x8_acc(const float* a, const float* b, float* c
 }
 #endif
 
-// register-tiled GEMM kernel (ACTIVE: called by matmul).
-// 8x8 NEON micro-tiles over the full K, scalar remainder for ragged edges.
-// Best measured single-core throughput on this hardware (~88 GFLOP/s in-cache).
+// register-tiled GEMM kernel (ACTIVE)
+// 8x8 micro-tiles over full K + scalar edge remainders
 static void gemm_tiled(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
 #if TL_HAVE_NEON
   const int64_t MR = 8, NR = 8;
@@ -385,14 +380,7 @@ static void gemm_tiled(const float* a, const float* b, float* out, int64_t M, in
 #endif
 }
 
-// ----------------------------------------------------------------------------
-// gemm_cache_blocked: KEPT FOR REFERENCE / LEARNING, not used by default.
-// Classic BLIS-style cache blocking (MC/NC/KC) wrapped around the register tile,
-// using the accumulating micro-kernel. On THIS hardware (4 MB L2 + Apple
-// prefetch, under VMware) it regressed ~25-30% vs plain gemm_tiled: the KC
-// accumulation tax isn't offset because nothing here is L1-capacity bound and
-// there is no packing yet. Useful to study; matmul deliberately calls gemm_tiled.
-// ----------------------------------------------------------------------------
+// gemm_cache_blocked (INACTIVE): BLIS-style MC/NC/KC blocking, no packing.
 [[maybe_unused]] static void gemm_cache_blocked(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
 #if TL_HAVE_NEON
   const int64_t MR = 8, NR = 8; // register tiles
@@ -447,6 +435,132 @@ static void gemm_tiled(const float* a, const float* b, float* out, int64_t M, in
     gemm_blocked(a, b, out, M, N, K);
 #endif
 }
+
+// PACKING: copy A/B blocks into contiguous buffers in micro-kernel read order.
+// matmul dispatches large matmuls to gemm_packed below
+// pack a kc x nc block of B -> 8-col panels [k0:n0..n7]...
+static void pack_B(const float* b, float* b_pack, int64_t pc, int64_t kc, int64_t jc, int64_t nc, int64_t N) {
+  const int64_t NR = 8;
+  int64_t dst = 0;
+  for (int64_t p = 0; p < nc; p += NR) {
+    for (int64_t k = 0; k < kc; ++k) {
+      const float* src = b + (pc + k) * N + (jc + p);
+      for (int64_t col = 0; col < NR; ++col) {
+        b_pack[dst++] = src[col];
+      }
+    }
+  }
+}
+
+// pack a mc x kc block of A -> 8-row panels [k0:m0..m7]...
+static void pack_A(const float* a, float* a_pack, int64_t pc, int64_t kc, int64_t ic, int64_t mc, int64_t K) {
+  const int64_t MR = 8;
+  int64_t dst = 0;
+  for (int64_t q = 0; q < mc; q += MR) {
+    for (int64_t k = 0; k < kc; ++k) {
+      for (int64_t row = 0; row < MR; ++row) {
+        a_pack[dst++] = a[(ic + q + row) * K + (pc + k)];
+      }
+    }
+  }
+
+}
+
+#if TL_HAVE_NEON
+// like _acc but reads contiguous panels (a_pack[k*8+row], b_pack[k*8+col])
+static inline void micro_kernel_8x8_packed(const float* a_pack, const float* b_pack, float* c, int64_t kc, int64_t N) {
+  float32x4_t c0l = vld1q_f32(c + 0*N + 0), c0r = vld1q_f32(c + 0*N + 4);
+  float32x4_t c1l = vld1q_f32(c + 1*N + 0), c1r = vld1q_f32(c + 1*N + 4);
+  float32x4_t c2l = vld1q_f32(c + 2*N + 0), c2r = vld1q_f32(c + 2*N + 4);
+  float32x4_t c3l = vld1q_f32(c + 3*N + 0), c3r = vld1q_f32(c + 3*N + 4);
+  float32x4_t c4l = vld1q_f32(c + 4*N + 0), c4r = vld1q_f32(c + 4*N + 4);
+  float32x4_t c5l = vld1q_f32(c + 5*N + 0), c5r = vld1q_f32(c + 5*N + 4);
+  float32x4_t c6l = vld1q_f32(c + 6*N + 0), c6r = vld1q_f32(c + 6*N + 4);
+  float32x4_t c7l = vld1q_f32(c + 7*N + 0), c7r = vld1q_f32(c + 7*N + 4);
+
+  for (int64_t k = 0; k < kc; ++k) {
+    float32x4_t bl = vld1q_f32(b_pack + k*8 + 0);   // cols 0..3, contiguous
+    float32x4_t br = vld1q_f32(b_pack + k*8 + 4);   // cols 4..7, contiguous
+    const float* ap = a_pack + k*8;                 // 8 row-values for this k
+    c0l = vfmaq_n_f32(c0l, bl, ap[0]); c0r = vfmaq_n_f32(c0r, br, ap[0]);
+    c1l = vfmaq_n_f32(c1l, bl, ap[1]); c1r = vfmaq_n_f32(c1r, br, ap[1]);
+    c2l = vfmaq_n_f32(c2l, bl, ap[2]); c2r = vfmaq_n_f32(c2r, br, ap[2]);
+    c3l = vfmaq_n_f32(c3l, bl, ap[3]); c3r = vfmaq_n_f32(c3r, br, ap[3]);
+    c4l = vfmaq_n_f32(c4l, bl, ap[4]); c4r = vfmaq_n_f32(c4r, br, ap[4]);
+    c5l = vfmaq_n_f32(c5l, bl, ap[5]); c5r = vfmaq_n_f32(c5r, br, ap[5]);
+    c6l = vfmaq_n_f32(c6l, bl, ap[6]); c6r = vfmaq_n_f32(c6r, br, ap[6]);
+    c7l = vfmaq_n_f32(c7l, bl, ap[7]); c7r = vfmaq_n_f32(c7r, br, ap[7]);
+  }
+
+  vst1q_f32(c + 0*N + 0, c0l); vst1q_f32(c + 0*N + 4, c0r);
+  vst1q_f32(c + 1*N + 0, c1l); vst1q_f32(c + 1*N + 4, c1r);
+  vst1q_f32(c + 2*N + 0, c2l); vst1q_f32(c + 2*N + 4, c2r);
+  vst1q_f32(c + 3*N + 0, c3l); vst1q_f32(c + 3*N + 4, c3r);
+  vst1q_f32(c + 4*N + 0, c4l); vst1q_f32(c + 4*N + 4, c4r);
+  vst1q_f32(c + 5*N + 0, c5l); vst1q_f32(c + 5*N + 4, c5r);
+  vst1q_f32(c + 6*N + 0, c6l); vst1q_f32(c + 6*N + 4, c6r);
+  vst1q_f32(c + 7*N + 0, c7l); vst1q_f32(c + 7*N + 4, c7r);
+}
+#endif
+
+// gemm_packed (ACTIVE for large matmuls): cache blocking + packing (full BLIS shape)
+[[maybe_unused]] static void gemm_packed(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
+#if TL_HAVE_NEON
+  const int64_t MR = 8, NR = 8;
+  const int64_t MC = 128, NC = 256, KC = 256;
+
+  for (int64_t i = 0; i < M * N; ++i) out[i] = 0.0f;   // packed kernel accumulates
+
+  const int64_t M8 = (M / MR) * MR;
+  const int64_t N8 = (N / NR) * NR;
+
+  std::vector<float> A_pack(MC * KC);
+  std::vector<float> B_pack(KC * NC);
+
+  for (int64_t jc = 0; jc < N8; jc += NC) {
+    int64_t nc = std::min(NC, N8 - jc);
+    for (int64_t pc = 0; pc < K; pc += KC) {
+      int64_t kc = std::min(KC, K - pc);
+      pack_B(b, B_pack.data(), pc, kc, jc, nc, N);          // pack B block once per (jc,pc)
+      for (int64_t ic = 0; ic < M8; ic += MC) {
+        int64_t mc = std::min(MC, M8 - ic);
+        pack_A(a, A_pack.data(), pc, kc, ic, mc, K);        // pack A block once per (jc,pc,ic)
+
+        for (int64_t m = ic; m < ic + mc; m += MR) {
+          const float* a_panel = A_pack.data() + ((m - ic) / MR) * kc * MR;
+          for (int64_t n = jc; n < jc + nc; n += NR) {
+            const float* b_panel = B_pack.data() + ((n - jc) / NR) * kc * NR;
+            micro_kernel_8x8_packed(a_panel, b_panel, out + m * N + n, kc, N);
+          }
+        }
+      }
+    }
+  }
+
+  // right edge remainders
+  for (int64_t mi = 0; mi < M8; ++mi) {
+    for (int64_t k = 0; k < K; ++k) {
+      float a_val = a[mi * K + k];
+      for (int64_t nj = N8; nj < N; ++nj) {
+        out[mi * N + nj] += a_val * b[k * N + nj];
+      }
+    }
+  }
+
+  // bottom edge remainders
+  for (int64_t mi = M8; mi < M; ++mi) {
+    for (int64_t k = 0; k < K; ++k) {
+      float a_val = a[mi * K + k];
+      for (int64_t nj = 0; nj < N; ++nj) {
+        out[mi * N + nj] += a_val * b[k * N + nj];
+      }
+    }
+  }
+#else
+  gemm_blocked(a, b, out, M, N, K);
+#endif
+}
+
 
 // matrix multiplication
 Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
@@ -512,7 +626,11 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     const float* bp = b.data() + index_b;
     float* op = out.data() + (i * M * N);
 
-    gemm_tiled(ap, bp, op, M, N, K);
+    if (M >= 256 && N >= 256 && K >= 256) {
+      gemm_packed(ap, bp, op, M, N, K);
+    } else {
+      gemm_tiled(ap, bp, op, M, N, K);
+    }
   }
 
   Tensor result = out;

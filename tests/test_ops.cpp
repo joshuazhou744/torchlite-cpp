@@ -92,6 +92,31 @@ void test_ops() {
     assert(is_close(heavy_out.data()[i], 512.0f, 1e-2f));
   }
 
+  // large ragged matmul: (259, 300) @ (300, 277) -> (259, 277)
+  // dims >= 256 route through the packed kernel; non-multiples of 8 hit the
+  // scalar remainders and K=300 (not a multiple of KC) hits the K-slab tail.
+  // integer-valued inputs keep the fp32 sums exact, so we can check every
+  // element against a naive triple-loop reference (catches index/pack bugs).
+  {
+    const int64_t LM = 259, LK = 300, LN = 277;
+    tl::Tensor la({LM, LK});
+    tl::Tensor lb({LK, LN});
+    for (int64_t i = 0; i < la.numel(); ++i) la.data()[i] = (float)((i * 3 + 1) % 11 - 5);
+    for (int64_t i = 0; i < lb.numel(); ++i) lb.data()[i] = (float)((i * 7 + 2) % 13 - 6);
+
+    tl::Tensor lo = tl::matmul(la, lb);
+    assert(lo.sizes()[0] == LM && lo.sizes()[1] == LN);
+
+    for (int64_t i = 0; i < LM; ++i) {
+      for (int64_t j = 0; j < LN; ++j) {
+        float ref = 0.0f;
+        for (int64_t k = 0; k < LK; ++k)
+          ref += la.data()[i * LK + k] * lb.data()[k * LN + j];
+        assert(is_close(lo.data()[i * LN + j], ref, 1e-3f));
+      }
+    }
+  }
+
   // test softmax normalization and order
   tl::Tensor softmax_tensor({3});
   softmax_tensor.data()[0] = 1.0f;
