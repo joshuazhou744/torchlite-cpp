@@ -7,6 +7,7 @@
 #include <algorithm> // for max()
 #include <cmath> // for sqrt() and exp()
 #include <limits> // for infinity
+#include <thread>
 
 #if defined(__aarch64__) || defined(__ARM_NEON)
   #include <arm_neon.h>
@@ -561,6 +562,27 @@ static inline void micro_kernel_8x8_packed(const float* a_pack, const float* b_p
 #endif
 }
 
+// gemm_mt: parallel driver for multithreading the gemm kernel
+static void gemm_mt(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
+  unsigned nthreads = std::thread::hardware_concurrency();
+  if (nthreads == 0) nthreads = 1;
+
+  int64_t rows_per = (M + nthreads - 1) / nthreads; // ceiling split
+
+  std::vector<std::thread> pool;
+  for (unsigned t = 0; t < nthreads; ++t) {
+    int64_t m_start = (int64_t)t * rows_per;
+    if (m_start >= M) break;
+    int64_t m_end = std::min(m_start + rows_per, M);
+    int64_t band = m_end - m_start;
+
+    pool.emplace_back([=]() {
+      gemm_packed(a + m_start * K, b, out + m_start * N, band, N, K);
+    });
+  }
+  for (auto& th: pool) th.join();
+}
+
 
 // matrix multiplication
 Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
@@ -627,7 +649,7 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
     float* op = out.data() + (i * M * N);
 
     if (M >= 256 && N >= 256 && K >= 256) {
-      gemm_packed(ap, bp, op, M, N, K);
+      gemm_mt(ap, bp, op, M, N, K);
     } else {
       gemm_tiled(ap, bp, op, M, N, K);
     }
