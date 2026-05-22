@@ -220,7 +220,7 @@ Tensor div(const Tensor& a, const Tensor& b) {
 // Stages: scalar baseline -> cache blocking -> register tiling -> packing.
 
 // naive triple loop
-static void gemm_naive(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
+[[maybe_unused]] static void gemm_naive(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
   for (int64_t m = 0; m < M; ++m) {
     for (int64_t n = 0; n < N; ++n) {
       out[m * N + n] = 0.0f;
