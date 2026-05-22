@@ -2,6 +2,8 @@
 #include <tl/factory.h>
 #include <tl/autograd.h>
 
+#include <iostream>
+#include <omp.h>
 #include <cstdint> // for int64_t
 #include <stdexcept>
 #include <algorithm> // for max()
@@ -583,13 +585,27 @@ static void gemm_mt(const float* a, const float* b, float* out, int64_t M, int64
   for (auto& th: pool) th.join();
 }
 
+// gemm_mt_omp: parallel driver for multithreading the gemm kernel using OpenMP
+static void gemm_mt_omp(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
+  unsigned nthreads = omp_get_max_threads();
+  int64_t rows_per = (M + nthreads - 1) / nthreads;
+
+  #pragma omp parallel for
+  for (int t = 0; t < nthreads; ++t) {
+    int64_t m_start = (int64_t)t * rows_per;
+    if (m_start >= M) continue;
+    int64_t m_end = std::min(m_start + rows_per, M);
+    int64_t band = m_end - m_start;
+    gemm_packed(a + m_start * K, b, out + m_start * N, band, N, K);
+  }
+}
 
 // matrix multiplication
 Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
   Tensor a = a_in.contiguous();
   Tensor b = b_in.contiguous();
 
-// squeeze and track 1D matrices
+  // squeeze and track 1D matrices
   bool squeeze_a = false, squeeze_b = false;
   if (a.sizes().size() == 1) {
     a = reshape(a, {1, a.sizes()[0]}); // [K] -> [1, K]
@@ -650,6 +666,7 @@ Tensor matmul(const Tensor& a_in, const Tensor& b_in) {
 
     if (M >= 256 && N >= 256 && K >= 256) {
       gemm_mt(ap, bp, op, M, N, K);
+      // gemm_mt_omp(ap, bp, op, M, N, K);
     } else {
       gemm_tiled(ap, bp, op, M, N, K);
     }

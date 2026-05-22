@@ -55,6 +55,7 @@ examples/           Example usages of the library
 ## Dependencies
 - [Eigen3](https://eigen.tuxfamily.org/): required by LibrosaCpp for audio preprocessing
 - [LibrosaCpp](https://github.com/ewan-xu/LibrosaCpp): single-header mel spectrogram computation (included in `include/external/`)
+- [OpenMP](https://www.openmp.org/): for the multithreaded GEMM kernel
 
 ## Requirements
 
