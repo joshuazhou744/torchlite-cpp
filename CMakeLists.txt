@@ -78,6 +78,7 @@ if(BUILD_EXAMPLES)
 
   add_executable(mnist_cnn examples/mnist_cnn.cpp)
   target_link_libraries(mnist_cnn PRIVATE torchlite)
+
 endif()
 
 if(BUILD_BENCH)
