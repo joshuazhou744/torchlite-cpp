@@ -45,6 +45,9 @@ Tensor scale(const Tensor& input, float scalar);
 // softmax along the last dimension of a tensor
 Tensor softmax(const Tensor& input);
 
+// flash attention (forward): out = softmax(Q @ K^T * sm_scale) @ V
+Tensor flash_attention(const Tensor& Q, const Tensor& K, const Tensor& V, float sm_scale);
+
 // returns index of maximum value along a given dimension
 Tensor argmax(const Tensor& input, int64_t dim);
 

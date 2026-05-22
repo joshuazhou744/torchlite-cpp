@@ -585,7 +585,7 @@ static void gemm_mt(const float* a, const float* b, float* out, int64_t M, int64
   for (auto& th: pool) th.join();
 }
 
-// gemm_mt_omp: parallel driver for multithreading the gemm kernel using OpenMP
+// gemm_mt_omp (INACTIVE): parallel driver for multithreading the gemm kernel using OpenMP
 static void gemm_mt_omp(const float* a, const float* b, float* out, int64_t M, int64_t N, int64_t K) {
   unsigned nthreads = omp_get_max_threads();
   int64_t rows_per = (M + nthreads - 1) / nthreads;
@@ -968,6 +968,93 @@ Tensor softmax(const Tensor& input) {
   }
 
   return out;
+}
+
+// flash attention forward: tiled Q @ K^T -> softmax -> scores @ V
+Tensor flash_attention(const Tensor& Q, const Tensor& K, const Tensor& V, float sm_scale) {
+  const int64_t S = Q.sizes()[0];
+  const int64_t d = Q.sizes()[1];
+
+  Tensor Qc = Q.contiguous(), Kc = K.contiguous(), Vc = V.contiguous();
+  const float* Qp = Qc.data();
+  const float* Kp = Kc.data();
+  const float* Vp = Vc.data();
+
+  Tensor O({S, d});
+  float* Op = O.data();
+
+  const int64_t Bq = 64, Bk = 64; // query and key block sizes
+
+  std::vector<float> T(Bq * Bk); // score tile
+  std::vector<float> m(Bq), l(Bq); // running max (m), running sum (l)
+  std::vector<float> Oacc(Bq * d); // output accumulator
+
+  for (int64_t i0 = 0; i0 < S; i0 += Bq) { // query blocks
+    int64_t qrows = std::min(Bq, S - i0);
+
+    // reset running state
+    for (int64_t qi = 0; qi < qrows; ++qi) {
+      m[qi] = -std::numeric_limits<float>::infinity();
+      l[qi] = 0.0f;
+      for (int64_t c = 0; c < d; ++c) Oacc[qi * d + c] = 0.0f;
+    }
+
+    // key and value blocks
+    for (int64_t j0 = 0; j0 < S; j0 += Bk) {
+      int64_t krows = std::min(Bk, S - j0);
+
+      // T = Q_i @ K_j^T * sm_scale -> tile[qrows, krows]
+      for (int64_t qi = 0; qi < qrows; ++qi) {
+        const float* qrow = Qp + (i0 + qi) * d;
+        for (int64_t kj = 0; kj < krows; ++kj) {
+          const float* krow = Kp + (j0 + kj) * d;
+          float dot = 0.0f;
+          for (int64_t c = 0; c < d; ++c) dot += qrow[c] * krow[c];
+          T[qi * Bk + kj] = dot * sm_scale;
+        }
+      }
+
+      // online softmax
+      for (int64_t qi = 0; qi < qrows; ++qi) {
+        float m_block = -std::numeric_limits<float>::infinity();
+        for (int64_t kj = 0; kj < krows; ++kj) {
+          m_block = std::max(m_block, T[qi * Bk + kj]);
+        }
+
+        float m_new = std::max(m[qi], m_block);
+        float corr = std::exp(m[qi] - m_new);
+
+        float row_sum = 0.0f;
+        for (int64_t kj = 0; kj < krows; ++kj) {
+          float p = std::exp(T[qi * Bk + kj] - m_new);
+          T[qi * Bk + kj] = p;
+          row_sum += p;
+        }
+        l[qi] = l[qi] * corr + row_sum;
+
+        // update output
+        float* oacc = Oacc.data() + qi * d;
+        for (int64_t c = 0; c < d; ++c) oacc[c] *= corr;
+        for (int64_t kj = 0; kj < krows; ++kj) {
+          float p = T[qi * Bk + kj];
+          const float* vrow = Vp + (j0 + kj) * d;
+          for (int64_t c = 0; c < d; ++c) oacc[c] += p * vrow[c];
+        }
+
+        m[qi] = m_new;
+      }
+    }
+
+    // normalize by running sum
+    for (int64_t qi = 0; qi < qrows; ++qi) {
+      const float* oacc = Oacc.data() + qi * d;
+      float inv = 1.0f / l[qi];
+      float* orow = Op + (i0 + qi) * d;
+      for (int64_t c = 0; c < d; ++c) orow[c] = oacc[c] * inv;
+    }
+  }
+
+  return O;
 }
 
 // argmax, get index of maximum value along a given dimension

@@ -84,4 +84,8 @@ if(BUILD_BENCH)
   add_executable(bench_matmul bench/bench_matmul.cpp)
   target_link_libraries(bench_matmul PRIVATE torchlite)
   target_compile_options(bench_matmul PRIVATE -O3 -march=native -DNDEBUG)
+
+  add_executable(bench_attention bench/bench_attention.cpp)
+  target_link_libraries(bench_attention PRIVATE torchlite)
+  target_compile_options(bench_attention PRIVATE -O3 -march=native -DNDEBUG)
 endif()

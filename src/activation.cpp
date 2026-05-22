@@ -27,7 +27,7 @@ Tensor sigmoid(const Tensor& input) {
   return out;
 }
 
-// unary relu
+// unary ReLU
 Tensor relu(const Tensor& input) {
   Tensor a = input.contiguous();
   Tensor out(a.sizes());
