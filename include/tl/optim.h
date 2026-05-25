@@ -32,17 +32,17 @@ public:
   Adam(
       const std::vector<Tensor*>& params,
       float lr = 1e-3f,
+      float weight_decay = 0.0f,
       float beta1 = 0.9f,
       float beta2 = 0.999f,
-      float eps = 1e-8f,
-      float weight_decay = 0.0f
+      float eps = 1e-8f
   );
   void step();
   void zero_grad();
 
 private:
   std::vector<Tensor*> params_;
-  float lr_, beta1_, beta2_, eps_, weight_decay_;
+  float lr_, weight_decay_, beta1_, beta2_, eps_;
   int64_t t_ = 0;
   std::unordered_map<Tensor*, Tensor> m_, v_;
 };
@@ -52,17 +52,17 @@ public:
   AdamW(
       const std::vector<Tensor*>& params,
       float lr = 1e-3f,
+      float weight_decay = 1e-2f,
       float beta1 = 0.9f,
       float beta2 = 0.999f,
-      float eps = 1e-8f,
-      float weight_decay = 1e-2f
+      float eps = 1e-8f
   );
   void step();
   void zero_grad();
 
 private:
   std::vector<Tensor*> params_;
-  float lr_, beta1_, beta2_, eps_, weight_decay_;
+  float lr_, weight_decay_, beta1_, beta2_, eps_;
   int64_t t_ = 0;
   std::unordered_map<Tensor*, Tensor> m_, v_;
 };

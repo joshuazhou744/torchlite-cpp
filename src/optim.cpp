@@ -84,16 +84,16 @@ void SGD::zero_grad() {
 Adam::Adam(
     const std::vector<Tensor*>& params,
     float lr,
+    float weight_decay,
     float beta1,
     float beta2,
-    float eps,
-    float weight_decay
+    float eps
 ) : params_(params),
     lr_(lr),
+    weight_decay_(weight_decay),
     beta1_(beta1),
     beta2_(beta2),
-    eps_(eps),
-    weight_decay_(weight_decay)
+    eps_(eps)
 {}
 
 // Adam step
@@ -153,16 +153,16 @@ void Adam::zero_grad() {
 AdamW::AdamW(
     const std::vector<Tensor*>& params,
     float lr,
+    float weight_decay,
     float beta1,
     float beta2,
-    float eps,
-    float weight_decay
+    float eps
 ) : params_(params),
     lr_(lr),
+    weight_decay_(weight_decay),
     beta1_(beta1),
     beta2_(beta2),
-    eps_(eps),
-    weight_decay_(weight_decay)
+    eps_(eps)
 {}
 
 // AdamW step
