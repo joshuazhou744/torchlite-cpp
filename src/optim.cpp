@@ -2,6 +2,7 @@
 #include <tl/tensor.h>
 #include <tl/ops.h>
 #include <tl/factory.h>
+#include <tl/autograd.h>
 
 #include <cstdint>
 #include <cmath>
@@ -41,6 +42,7 @@ SGD::SGD(
 
 // SGD step
 void SGD::step() {
+  NoGradGuard no_grad; // optimizer math must not build an autograd graph
   for (Tensor* p: params_) {
     if (!p->requires_grad || p->grad().empty()) continue;
 
@@ -98,6 +100,7 @@ Adam::Adam(
 
 // Adam step
 void Adam::step() {
+  NoGradGuard no_grad; // optimizer math must not build an autograd graph (leak otherwise)
   ++t_;
   for (Tensor* p: params_) {
     if (!p->requires_grad || p->grad().empty()) continue;
@@ -167,6 +170,7 @@ AdamW::AdamW(
 
 // AdamW step
 void AdamW::step() {
+  NoGradGuard no_grad; // optimizer math must not build an autograd graph (leak otherwise)
   ++t_;
   for (Tensor* p: params_) {
     if (!p->requires_grad || p->grad().empty()) continue;
