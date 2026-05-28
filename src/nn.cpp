@@ -33,6 +33,15 @@ std::vector<Tensor*> Sequential::parameters() {
   return params;
 }
 
+std::vector<Tensor*> Sequential::buffers() {
+  std::vector<Tensor*> bufs;
+  for (Module* layer: layers_) {
+    auto b = layer->buffers();
+    bufs.insert(bufs.end(), b.begin(), b.end());
+  }
+  return bufs;
+}
+
 // Linear layer
 Linear::Linear(int64_t in_features, int64_t out_features, bool use_bias)
   : weight_(scale(randn({in_features, out_features}), std::sqrt(2.0f / in_features))),

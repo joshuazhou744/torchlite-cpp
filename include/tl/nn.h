@@ -13,6 +13,7 @@ public:
   virtual ~Module() = default; // use default destructor
   virtual Tensor forward(const Tensor& input) const = 0; // pure virtual forward
   virtual std::vector<Tensor*> parameters() = 0; // pure virtual parameters
+  virtual std::vector<Tensor*> buffers() { return {}; } // generic buffer holder
 };
 
 // Sequential: chain of modules
@@ -21,6 +22,7 @@ public:
   Sequential(std::vector<Module*> layers);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
+  std::vector<Tensor*> buffers() override;
 
 private:
   std::vector<Module*> layers_;
@@ -215,6 +217,9 @@ public:
   const Tensor& beta() const { return beta_; }
   void set_training(bool t) { training_ = t; }
   bool training() const { return training_; }
+  std::vector<Tensor*> buffers() override {
+    return {&running_mean_, &running_var_};
+  }
 
 
 private:
