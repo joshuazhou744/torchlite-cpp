@@ -309,38 +309,63 @@ Tensor PositionalEncoding::forward(const Tensor& input) const {
 }
 
 // Batch norm 2D
-BatchNorm2d::BatchNorm2d(int64_t num_channels, float eps)
+BatchNorm2d::BatchNorm2d(int64_t num_channels, float eps, float momentum)
   : gamma_(ones({num_channels})),
     beta_(zeros({num_channels})),
     num_channels_(num_channels),
-    eps_(eps)
+    eps_(eps),
+    momentum_(momentum),
+    running_mean_(zeros({num_channels})),
+    running_var_(ones({num_channels}))
 {
   gamma_.set_requires_grad(true);
   beta_.set_requires_grad(true);
+  running_mean_.set_requires_grad(false);
+  running_var_.set_requires_grad(false);
 }
 
 Tensor BatchNorm2d::forward(const Tensor& input) const {
-  // input: (N, C, H, W) -> reduce dims with keepdim -> (1, C, 1, 1)
-  // get per-channel mean
-  Tensor m = mean(input, 0, true);
-  m = mean(m, 2, true);
-  m = mean(m, 3, true);
+  if (training_) {
+    // input: (N, C, H, W) -> reduce dims with keepdim -> (1, C, 1, 1)
+    // get per-channel mean
+    Tensor m = mean(input, 0, true);
+    m = mean(m, 2, true);
+    m = mean(m, 3, true);
 
-  // per-channel variance
-  Tensor diff = sub(input, m);
-  Tensor sq = mul(diff, diff);
-  Tensor v = mean(sq, 0, true);
-  v = mean(v, 2, true);
-  v = mean(v, 3, true);
+    // per-channel variance
+    Tensor diff = sub(input, m);
+    Tensor sq = mul(diff, diff);
+    Tensor v = mean(sq, 0, true);
+    v = mean(v, 2, true);
+    v = mean(v, 3, true);
+    {
+      // update running stats
+      NoGradGuard no_grad;
+      Tensor m_flat = reshape(m, {num_channels_});
+      Tensor v_flat = reshape(v, {num_channels_});
+      running_mean_ = add(scale(running_mean_, 1.0f - momentum_), scale(m_flat, momentum_));
+      running_var_ = add(scale(running_var_, 1.0f - momentum_), scale(v_flat, momentum_));
+    }
 
-  // normalize: (x - mu) / sqrt(var + eps)
-  Tensor denom = sqrt(add(v, full(v.sizes(), eps_)));
-  Tensor normed = div(diff, denom);
+    // normalize: (x - mu) / sqrt(var + eps)
+    Tensor denom = sqrt(add(v, full(v.sizes(), eps_)));
+    Tensor normed = div(diff, denom);
 
-  // learnable scale and shift
-  Tensor g = reshape(gamma_, {1, num_channels_, 1, 1});
-  Tensor b = reshape(beta_, {1, num_channels_, 1, 1});
-  return add(mul(normed, g), b);
+    // learnable scale and shift
+    Tensor g = reshape(gamma_, {1, num_channels_, 1, 1});
+    Tensor b = reshape(beta_, {1, num_channels_, 1, 1});
+    return add(mul(normed, g), b);
+  } else {
+    // eval mode, use running stats
+    Tensor m = reshape(running_mean_, {1, num_channels_, 1, 1});
+    Tensor v = reshape(running_var_,  {1, num_channels_, 1, 1});
+    Tensor denom = sqrt(add(v, full(v.sizes(), eps_)));
+    Tensor normed = div(sub(input, m), denom);
+
+    Tensor g = reshape(gamma_, {1, num_channels_, 1, 1});
+    Tensor b = reshape(beta_,  {1, num_channels_, 1, 1});
+    return add(mul(normed, g), b);
+  }
 }
 
 std::vector<Tensor*> BatchNorm2d::parameters() {
