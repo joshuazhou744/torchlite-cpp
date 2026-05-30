@@ -24,6 +24,12 @@ Tensor Sequential::forward(const Tensor& input) const {
   return out;
 }
 
+void Sequential::set_training(bool t) {
+  for (Module* layer: layers_) {
+    layer->set_training(true);
+  }
+}
+
 std::vector<Tensor*> Sequential::parameters() {
   std::vector<Tensor*> params;
   for (Module* layer: layers_) {

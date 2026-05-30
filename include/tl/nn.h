@@ -14,6 +14,7 @@ public:
   virtual Tensor forward(const Tensor& input) const = 0; // pure virtual forward
   virtual std::vector<Tensor*> parameters() = 0; // pure virtual parameters
   virtual std::vector<Tensor*> buffers() { return {}; } // generic buffer holder
+  virtual void set_training(bool) {}
 };
 
 // Sequential: chain of modules
@@ -23,6 +24,9 @@ public:
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   std::vector<Tensor*> buffers() override;
+  void set_training(bool t) override;
+  void train() { set_training(true); }
+  void eval() { set_training(false); }
 
 private:
   std::vector<Module*> layers_;
@@ -88,7 +92,7 @@ public:
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override { return {}; }
 
-  void set_training(bool t) { training_ = t; }
+  void set_training(bool t) override { training_ = t; }
   bool training() const { return training_; }
 
 private:
@@ -215,7 +219,7 @@ public:
   void set_beta(const Tensor& b) { beta_ = b; }
   const Tensor& gamma() const { return gamma_; }
   const Tensor& beta() const { return beta_; }
-  void set_training(bool t) { training_ = t; }
+  void set_training(bool t) override { training_ = t; }
   bool training() const { return training_; }
   std::vector<Tensor*> buffers() override {
     return {&running_mean_, &running_var_};
