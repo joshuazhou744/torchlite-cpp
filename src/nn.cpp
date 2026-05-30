@@ -26,7 +26,7 @@ Tensor Sequential::forward(const Tensor& input) const {
 
 void Sequential::set_training(bool t) {
   for (Module* layer: layers_) {
-    layer->set_training(true);
+    layer->set_training(t);
   }
 }
 
@@ -178,6 +178,14 @@ MultiHeadAttention::MultiHeadAttention(int64_t d_model, int64_t num_heads)
   }
 }
 
+// MSA set training mode
+void MultiHeadAttention::set_training(bool t) {
+  q_proj_.set_training(t);
+  k_proj_.set_training(t);
+  v_proj_.set_training(t);
+  out_proj_.set_training(t);
+}
+
 // get MSA head parameters (aggregate of all linear layer params)
 std::vector<Tensor*> MultiHeadAttention::parameters() {
   std::vector<Tensor*> params;
@@ -242,8 +250,16 @@ TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_he
     ff1_(d_model, d_ff),
     ff2_(d_ff, d_model),
     dropout_(dropout_p)
-{
-  dropout_.set_training(false);
+{}
+
+void TransformerEncoderLayer::set_training(bool t) {
+  // forward to every Module child
+  msa_.set_training(t);
+  norm1_.set_training(t);
+  norm2_.set_training(t);
+  ff1_.set_training(t);
+  ff2_.set_training(t);
+  dropout_.set_training(t);
 }
 
 // get Transformer encoder layer parameters (aggregate of msa, norm and feed-forward layers)
@@ -282,6 +298,11 @@ TransformerEncoder::TransformerEncoder(int64_t d_model, int64_t num_heads, int64
   }
 }
 
+void TransformerEncoder::set_training(bool t) {
+  for (auto& layer: layers_) {
+    layer.set_training(t);
+  }
+}
 
 Tensor TransformerEncoder::forward(const Tensor& input) const {
   Tensor x = input;

@@ -105,6 +105,7 @@ class MultiHeadAttention {
 public:
   MultiHeadAttention(int64_t d_model, int64_t num_heads);
   Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
+  void set_training(bool t);
 
   Linear& q_proj() { return q_proj_; }
   Linear& k_proj() { return k_proj_; }
@@ -130,6 +131,7 @@ public:
   TransformerEncoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p = 0.1f);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
+  void set_training(bool t) override;
 
   MultiHeadAttention& msa() { return msa_; }
   LayerNorm& norm1() { return norm1_; }
@@ -152,6 +154,7 @@ public:
   TransformerEncoder(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p = 0.1f);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
+  void set_training(bool t) override;
 
   TransformerEncoderLayer& layer(int64_t i) { return layers_[i]; }
 
