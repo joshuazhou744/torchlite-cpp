@@ -408,5 +408,21 @@ std::vector<Tensor*> BatchNorm2d::parameters() {
   return {&gamma_, &beta_};
 }
 
+// Input normalization
+InputNormalize::InputNormalize()
+  : mean_(zeros({1})),
+    std_(ones({1}))
+{}
+
+// forward: (input - mean) / std
+Tensor InputNormalize::forward(const Tensor& input) const {
+  return div(sub(input, mean_), std_);
+}
+
+void InputNormalize::set_stats(float m, float s) {
+  mean_.data()[0] = m;
+  std_.data()[0] = s;
+}
+
 }
 }

@@ -240,5 +240,19 @@ private:
   bool training_ = true;
 };
 
+// InputNormalize: scalar (x - mean) / std_deviation applied to input
+// stats (mean and std_deviation) stored as buffers
+class InputNormalize: public Module {
+public:
+  InputNormalize();
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return {}; }
+  std::vector<Tensor*> buffers() override { return {&mean_, &std_}; }
+  void set_stats(float m, float s);
+private:
+  mutable Tensor mean_; // [1]
+  mutable Tensor std_; // [1]
+};
+
 } // nn
 } // tl
