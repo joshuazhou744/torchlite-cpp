@@ -96,8 +96,15 @@ void ReluBackward::backward(const Tensor& grad_output) {
 }
 
 void SumBackward::backward(const Tensor& grad_output) {
+  Tensor go = grad_output;
+  // summed dim dropped, put it back as size-1
+  if (!keepdim_) {
+    std::vector<int64_t> kd_shape = go.sizes();
+    kd_shape.insert(kd_shape.begin() + dim_, 1);
+    go = reshape(go, kd_shape);
+  }
   Tensor expanded = full(input_shape, 0.0f);
-  Tensor grad = add(expanded, grad_output);
+  Tensor grad = add(expanded, go);
   accumulate_grad(inputs[0], grad);
 }
 

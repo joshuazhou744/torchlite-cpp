@@ -6,13 +6,15 @@ A lightweight C++ tensor library implementing core PyTorch-like operations for C
 
 **Tensor Operations**
 - N-dimensional tensor data structure with automatic stride calculation
-- Element-wise operations (add, sub, mul, div, neg, exp, log, pow, clamp) with NumPy-style broadcasting
-- Matrix multiplication with batch dimension support
+- Element-wise operations (add, sub, mul, div, neg, exp, log, pow, sqrt, abs, clamp) with NumPy-style broadcasting
+- Matrix multiplication with batch dimension support; flash attention
+- Convolution and pooling: conv2d, max_pool2d, avg_pool2d
 - Reductions: sum, mean, variance, argmax, softmax
 - Reshape, transpose, cat, stack, slice, pad
 
 **Neural Network Modules**
-- Linear, LayerNorm, Dropout
+- Linear, Conv2d, MaxPool2d, AvgPool2d, Flatten
+- LayerNorm, BatchNorm2d, InputNormalize, Dropout
 - MultiHeadAttention, TransformerEncoderLayer, TransformerEncoder
 - PositionalEncoding
 - Activation functions: ReLU, GELU, Sigmoid
@@ -49,6 +51,7 @@ include/tl/         Public API headers (tensor, ops, nn, activation, factory, au
 include/external/   Third-party headers (LibrosaCpp)
 src/                Implementation
 tests/              Test executables
+bench/              Operation benchmarks
 examples/           Example usages of the library
 ```
 
@@ -62,20 +65,6 @@ examples/           Example usages of the library
 - C++17 or later
 - CMake 3.10+
 - Eigen3 (`sudo apt install libeigen3-dev`)
-
-## Usage Notes
-
-## Development Start
-
-Build the library:
-
-```bash
-mkdir build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-```
-
-The **Debug** build has no optimizations and enables assert.
 
 ## License
 

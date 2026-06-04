@@ -62,6 +62,8 @@ class SumBackward: public GradFunction {
 public:
   std::vector<int64_t> input_shape;
   void backward(const Tensor& grad_output) override;
+  int64_t dim_;
+  bool keepdim_;
 };
 
 class AbsBackward: public GradFunction {

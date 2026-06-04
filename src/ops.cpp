@@ -1145,6 +1145,8 @@ Tensor sum(const Tensor& input, int64_t dim, bool keepdim) {
   if (input.requires_grad) {
     if (auto fn = track<SumBackward>(out, {&input})) {
       fn->input_shape = input.sizes();
+      fn->dim_ = dim;
+      fn->keepdim_ = keepdim;
     }
   }
 
