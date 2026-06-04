@@ -55,6 +55,11 @@ bench/              Operation benchmarks
 examples/           Example usages of the library
 ```
 
+## Examples
+
+### CNN Binary Classifier
+See [here](https://github.com/joshuazhou744/binary-classifier-tl) for a CNN binary classifier built using torchlite-cpp.
+
 ## Dependencies
 - [Eigen3](https://eigen.tuxfamily.org/): required by LibrosaCpp for audio preprocessing
 - [LibrosaCpp](https://github.com/ewan-xu/LibrosaCpp): single-header mel spectrogram computation (included in `include/external/`)
