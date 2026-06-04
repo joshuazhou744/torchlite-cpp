@@ -65,6 +65,7 @@ examples/           Example usages of the library
 - C++17 or later
 - CMake 3.10+
 - Eigen3 (`sudo apt install libeigen3-dev`)
+- OpenMP (`sudo apt install libgomp1`)
 
 ## License
 
