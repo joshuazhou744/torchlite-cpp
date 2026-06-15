@@ -446,5 +446,65 @@ void test_ops() {
   assert(mp_default.sizes()[2] == 2 && mp_default.sizes()[3] == 2);
   assert(is_close(mp_default.data()[0], 6.0f));
 
+  // ---- flash attention forward: must match the materialized reference ----
+  // reference: O = softmax(Q @ K^T * scale) @ V, computed with the standard ops.
+  // S=80 deliberately crosses the 64-row tile boundary to exercise the tiling.
+  {
+    const int64_t S = 80, d = 16;
+    tl::Tensor Q = tl::randn({S, d});
+    tl::Tensor K = tl::randn({S, d});
+    tl::Tensor V = tl::randn({S, d});
+    float sm_scale = 1.0f / std::sqrt((float)d);
+
+    tl::Tensor scores = tl::scale(tl::matmul(Q, tl::transpose(K, 0, 1)), sm_scale);
+    tl::Tensor ref = tl::matmul(tl::softmax(scores), V);   // [S, d]
+
+    tl::Tensor flash = tl::flash_attention(Q, K, V, sm_scale);
+
+    assert(flash.sizes()[0] == S && flash.sizes()[1] == d);
+    for (int64_t i = 0; i < S * d; ++i)
+      assert(is_close(flash.data()[i], ref.data()[i], 1e-4f));
+    std::cout << "  flash_attention forward ok\n";
+  }
+
+  // ---- flash attention backward: grads must match autograd through the reference ----
+  // ground truth = backprop through the materialized softmax-attention path.
+  // backward() seeds dO = ones, so both paths get the same upstream gradient.
+  {
+    const int64_t S = 80, d = 16;
+    tl::Tensor Q = tl::randn({S, d});
+    tl::Tensor K = tl::randn({S, d});
+    tl::Tensor V = tl::randn({S, d});
+    Q.set_requires_grad(true);
+    K.set_requires_grad(true);
+    V.set_requires_grad(true);
+    float sm_scale = 1.0f / std::sqrt((float)d);
+
+    // reference backward (ground truth)
+    tl::Tensor scores = tl::scale(tl::matmul(Q, tl::transpose(K, 0, 1)), sm_scale);
+    tl::Tensor ref = tl::matmul(tl::softmax(scores), V);
+    ref.backward();
+
+    std::vector<float> dQ_ref(Q.grad().data(), Q.grad().data() + S * d);
+    std::vector<float> dK_ref(K.grad().data(), K.grad().data() + S * d);
+    std::vector<float> dV_ref(V.grad().data(), V.grad().data() + S * d);
+
+    // clear grads before the flash pass (accumulate_grad would otherwise add on top)
+    Q.grad() = tl::Tensor();
+    K.grad() = tl::Tensor();
+    V.grad() = tl::Tensor();
+
+    // flash backward
+    tl::Tensor flash = tl::flash_attention(Q, K, V, sm_scale);
+    flash.backward();
+
+    for (int64_t i = 0; i < S * d; ++i) {
+      assert(is_close(Q.grad().data()[i], dQ_ref[i], 1e-4f));
+      assert(is_close(K.grad().data()[i], dK_ref[i], 1e-4f));
+      assert(is_close(V.grad().data()[i], dV_ref[i], 1e-4f));
+    }
+    std::cout << "  flash_attention backward ok\n";
+  }
+
   std::cout << "ops tests passed" << std::endl;
 }

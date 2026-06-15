@@ -530,7 +530,99 @@ void DropoutBackward::backward(const Tensor& grad_output) {
 }
 
 void FlashAttentionBackward::backward(const Tensor& grad_output) {
-  (void) grad_output;
+  const int64_t S = Q_cache.sizes()[0];
+  const int64_t d = Q_cache.sizes()[1];
+
+  Tensor dO = grad_output.contiguous();
+  const float* dOp = dO.data();
+  const float* Qp  = Q_cache.data();
+  const float* Kp  = K_cache.data();
+  const float* Vp  = V_cache.data();
+  const float* Op  = O_cache.data();
+  const float* Lp  = L_cache.data();
+
+  Tensor dQ = zeros({S, d});
+  Tensor dK = zeros({S, d});
+  Tensor dV = zeros({S, d});
+  float* dQp = dQ.data();
+  float* dKp = dK.data();
+  float* dVp = dV.data();
+
+  // D[i] = dO[i] · O[i]
+  std::vector<float> D(S);
+  for (int64_t i = 0; i < S; ++i) {
+    float dot = 0.0f;
+    const float* doi = dOp + i * d;
+    const float* oi  = Op  + i * d;
+    for (int64_t c = 0; c < d; ++c) dot += doi[c] * oi[c];
+    D[i] = dot;
+  }
+
+  const int64_t Bq = 64, Bk = 64;
+  std::vector<float> T(Bq * Bk); // score tile S_ij
+  std::vector<float> P(Bq * Bk); // prob tile P_ij
+
+  for (int64_t i0 = 0; i0 < S; i0 += Bq) {
+    int64_t qrows = std::min(Bq, S - i0);
+
+    for (int64_t j0 = 0; j0 < S; j0 += Bk) {
+      int64_t krows = std::min(Bk, S - j0);
+
+      // recompute S_ij = Q_i · K_j * scale  (same as forward)
+      for (int64_t qi = 0; qi < qrows; ++qi) {
+        const float* qrow = Qp + (i0 + qi) * d;
+        for (int64_t kj = 0; kj < krows; ++kj) {
+          const float* krow = Kp + (j0 + kj) * d;
+          float dot = 0.0f;
+          for (int64_t c = 0; c < d; ++c) dot += qrow[c] * krow[c];
+          T[qi * Bk + kj] = dot * sm_scale;
+        }
+      }
+
+      // recompute P_ij = exp(S_ij - L_i)  (no need to re-run online softmax)
+      for (int64_t qi = 0; qi < qrows; ++qi) {
+        float Li = Lp[i0 + qi];
+        for (int64_t kj = 0; kj < krows; ++kj)
+          P[qi * Bk + kj] = std::exp(T[qi * Bk + kj] - Li);
+      }
+
+      // accumulate dV, dQ, dK
+      for (int64_t qi = 0; qi < qrows; ++qi) {
+        const float* doi  = dOp + (i0 + qi) * d;
+        const float* qrow = Qp  + (i0 + qi) * d;
+        float* dqi = dQp + (i0 + qi) * d;
+        float Di = D[i0 + qi];
+
+        for (int64_t kj = 0; kj < krows; ++kj) {
+          float Pij = P[qi * Bk + kj];
+          const float* vrow = Vp  + (j0 + kj) * d;
+          const float* krow = Kp  + (j0 + kj) * d;
+          float* dvj = dVp + (j0 + kj) * d;
+          float* dkj = dKp + (j0 + kj) * d;
+
+          // dP_ij = dO_i · V_j
+          float dPij = 0.0f;
+          for (int64_t c = 0; c < d; ++c) dPij += doi[c] * vrow[c];
+
+          // dS_ij = P_ij * (dP_ij - D_i)
+          float dSij = Pij * (dPij - Di);
+
+          // dV_j += P_ij * dO_i
+          for (int64_t c = 0; c < d; ++c) dvj[c] += Pij * doi[c];
+
+          // dQ_i += scale * dS_ij * K_j
+          for (int64_t c = 0; c < d; ++c) dqi[c] += sm_scale * dSij * krow[c];
+
+          // dK_j += scale * dS_ij * Q_i
+          for (int64_t c = 0; c < d; ++c) dkj[c] += sm_scale * dSij * qrow[c];
+        }
+      }
+    }
+  }
+
+  accumulate_grad(inputs[0], dQ);  // Q
+  accumulate_grad(inputs[1], dK);  // K
+  accumulate_grad(inputs[2], dV);  // V
 }
 
 } // tl
