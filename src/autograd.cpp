@@ -529,4 +529,8 @@ void DropoutBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], mul(grad_output, mask_cache));
 }
 
+void FlashAttentionBackward::backward(const Tensor& grad_output) {
+  (void) grad_output;
+}
+
 } // tl

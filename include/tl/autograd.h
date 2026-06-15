@@ -183,6 +183,15 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class FlashAttentionBackward: public GradFunction {
+public:
+  Tensor Q_cache, K_cache, V_cache;
+  Tensor O_cache;
+  Tensor L_cache;
+  float sm_scale;
+  void backward(const Tensor& grad_output) override;
+};
+
 // Helper functions
 
 template<typename BackwardFn>

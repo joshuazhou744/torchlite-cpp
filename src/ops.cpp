@@ -982,6 +982,8 @@ Tensor flash_attention(const Tensor& Q, const Tensor& K, const Tensor& V, float 
 
   Tensor O({S, d});
   float* Op = O.data();
+  Tensor L({S});
+  float* Lp = L.data();
 
   const int64_t Bq = 64, Bk = 64; // query and key block sizes
 
@@ -1051,9 +1053,20 @@ Tensor flash_attention(const Tensor& Q, const Tensor& K, const Tensor& V, float 
       float inv = 1.0f / l[qi];
       float* orow = Op + (i0 + qi) * d;
       for (int64_t c = 0; c < d; ++c) orow[c] = oacc[c] * inv;
+      Lp[i0 + qi] = m[qi] + std::log(l[qi]);
     }
   }
 
+  if (Q.requires_grad || K.requires_grad || V.requires_grad) {
+    if (auto fn = track<FlashAttentionBackward>(O, {&Q, &K, &V})) {
+      fn->Q_cache = Qc;
+      fn->K_cache = Kc;
+      fn->V_cache = Vc;
+      fn->O_cache = O;
+      fn->L_cache = L;
+      fn->sm_scale = sm_scale;
+    }
+  }
   return O;
 }
 
