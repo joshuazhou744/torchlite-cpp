@@ -1380,27 +1380,31 @@ Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int
       float* cp = col_ng.data();
       for (int64_t c = 0; c < C_in_g; ++c) { // iterate over each input channel
         int64_t c_actual = g * C_in_g + c;
+        const float* in_ch = ip + n * (C_in * H * W) + c_actual * (H * W);
         for (int64_t kh = 0; kh < kH; ++kh) { // iterate over each kernel row
           for (int64_t kw = 0; kw < kW; ++kw) { // iterate over each kernel col
+            int64_t col_row = c * kH * kW + kh * kW + kw;
+            float* col_row_ptr = cp + col_row * (H_out * W_out);
+            int64_t ow_start = 0;
+            while (ow_start < W_out && (ow_start * stride - padding + kw) < 0) ++ow_start;
+            int64_t ow_end = W_out;
+            while (ow_end > 0 && ((ow_end - 1) * stride - padding + kw) >= W) --ow_end;
             for (int64_t oh = 0; oh < H_out; ++oh) { // iterate over output height
-              for (int64_t ow = 0; ow < W_out; ++ow) { // iterate over output width
-                // map output pixels to input pixel
-                int64_t ih = oh * stride - padding + kh;
+              int64_t ih = oh * stride - padding + kh;
+              float* out_row = col_row_ptr + oh * W_out;
+              if (ih < 0 || ih >= H) {
+                std::fill(out_row, out_row + W_out, 0.0f);
+                continue;
+              }
+              const float* in_row = in_ch + ih * W;
+
+              // zero the left/right padding edges
+              std::fill(out_row, out_row + ow_start, 0.0f);
+              std::fill(out_row + ow_end, out_row + W_out, 0.0f);
+
+              for (int64_t ow = ow_start; ow < ow_end; ++ow) {
                 int64_t iw = ow * stride - padding + kw;
-
-                // write to the col matrix
-                int64_t col_row = c * kH * kW + kh * kW + kw;
-                int64_t col_col = oh * W_out + ow;
-
-                // flat index into col
-                int64_t col_i = col_row*(H_out*W_out) + col_col;
-
-                if (ih < 0 || ih >= H || iw < 0 || iw >= W) {
-                  cp[col_i] = 0.0f; // padding
-                } else {
-                  int64_t in_i = n*(C_in*H*W) + c_actual*(H*W) + ih*W + iw;
-                  cp[col_i] = ip[in_i]; // get input value
-                }
+                out_row[ow] = in_row[iw];
               }
             }
           }
