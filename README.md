@@ -19,13 +19,36 @@ A lightweight C++ tensor library implementing core PyTorch-like operations for C
 - PositionalEncoding
 - Activation functions: ReLU, GELU, Sigmoid
 
+**Training**
+- Reverse-mode autograd (backward computation graph) over all operations
+- Optimizers: SGD, Adam, AdamW
+- Loss functions: MSE, MAE, BCE, NLL, Cross-entropy
+
 **Design**
 - CPU-only, float32 operations
 - Weight loading from raw binary files
 
-## Quick Start
+## Use in your project (CMake)
 
-Build the library:
+Pull `torchlite` into your CMake project with FetchContent:
+
+```
+include(FetchContent)
+
+FetchContent_Declare(
+    torchlite
+    GIT_REPOSITORY https://github.com/joshuazhou744/torchlite-cpp
+    GIT_TAG main
+)
+FetchContent_MakeAvailable(torchlite)
+
+target_link_libraries(myapp PRIVATE torchlite)
+```
+
+Then `#include <tl/tensor.h>` in your code. The external dependencies (e.g., Eigen3) will propagate automatically.
+
+
+## Build from source
 
 ```bash
 mkdir build
@@ -38,7 +61,7 @@ The **Release** build enables optimizations (`-O3 march=native -DNDEBUG`):
 - `-march=native`: targets CPU specific instruction set
 - `-DNDEBUG`: disables `assert()` calls in hot paths
 
-Run tests:
+Run tests (development):
 
 ```
 ./build/run_tests
@@ -68,7 +91,7 @@ See [here](https://github.com/joshuazhou744/binary-classifier-tl) for a CNN bina
 ## Requirements
 
 - C++17 or later
-- CMake 3.10+
+- CMake 3.16+
 - Eigen3 (`sudo apt install libeigen3-dev`)
 - OpenMP (`sudo apt install libgomp1`)
 

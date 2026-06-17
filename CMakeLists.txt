@@ -4,7 +4,6 @@ project(torchlite_cpp LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-
 # library components
 add_library(torchlite
     src/tensor.cpp
@@ -32,10 +31,10 @@ target_compile_options(torchlite PRIVATE
   $<$<CONFIG:Debug>:-O0 -g>
 )
 
-
 target_include_directories(torchlite
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
 
 # build tests/examples only when torchlite is the top-level project by default
 # (so downstream consumers via FetchContent/add_subdirectory don't build them)
@@ -43,6 +42,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(TORCHLITE_TOP_LEVEL ON)
 else()
   set(TORCHLITE_TOP_LEVEL OFF)
+endif()
+
+# install rules for global install
+# for users who don't have torchlite built already
+if(TORCHLITE_TOP_LEVEL)
+  include(GNUInstallDirs)
+  install(TARGETS torchlite
+          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(DIRECTORY include/tl DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
 option(BUILD_TESTS "Build tests" ${TORCHLITE_TOP_LEVEL})
