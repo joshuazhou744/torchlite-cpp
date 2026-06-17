@@ -32,7 +32,7 @@ A lightweight C++ tensor library implementing core PyTorch-like operations for C
 
 Pull `torchlite` into your CMake project with FetchContent:
 
-```
+```cmake
 include(FetchContent)
 
 FetchContent_Declare(
@@ -63,7 +63,7 @@ The **Release** build enables optimizations (`-O3 march=native -DNDEBUG`):
 
 Run tests (development):
 
-```
+```bash
 ./build/run_tests
 ```
 

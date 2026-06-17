@@ -44,8 +44,7 @@ else()
   set(TORCHLITE_TOP_LEVEL OFF)
 endif()
 
-# install rules for global install
-# for users who don't have torchlite built already
+# install rules: copy headers + static library to system paths (global install)
 if(TORCHLITE_TOP_LEVEL)
   include(GNUInstallDirs)
   install(TARGETS torchlite
