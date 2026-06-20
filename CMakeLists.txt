@@ -71,6 +71,7 @@ if(BUILD_TESTS)
     tests/test_model_io.cpp
   )
   target_link_libraries(run_tests PRIVATE torchlite)
+  target_compile_options(run_tests PRIVATE -UNDEBUG)
 endif()
 
 if(BUILD_EXAMPLES)

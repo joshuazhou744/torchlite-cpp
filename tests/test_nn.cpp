@@ -5,6 +5,8 @@
 #include <tl/factory.h>
 #include <cassert>
 #include <cmath>
+#include <vector>
+#include "test_utils.h" // CHECK(): NDEBUG-proof, unlike assert()
 
 // helper function for float comparison
 bool is_close_nn(float a, float b, float e = 1e-5) {
@@ -234,6 +236,93 @@ void test_nn() {
   assert(maxpool_def_out.sizes()[3] == 2);
   assert(is_close_nn(maxpool_def_out.data()[0], 6.0f));
   assert(is_close_nn(maxpool_def_out.data()[3], 16.0f));
+
+  // test Checkpoint: gradient checkpointing must reproduce the plain block's
+  // gradients exactly (same input-grads AND same weight-grads). The wrapped run
+  // builds no graph in forward and recomputes the block in backward, so matching
+  // the plain run proves the recompute is faithful.
+  {
+    // one shared block instance -> identical weights for both runs
+    tl::nn::Linear ckpt_lin(4, 3);
+    tl::nn::ReLU ckpt_relu;
+    tl::nn::Sequential ckpt_block({&ckpt_lin, &ckpt_relu});
+    std::vector<tl::Tensor*> ckpt_params = ckpt_block.parameters(); // weight, bias
+
+    // two inputs with identical values, both requiring grad
+    tl::Tensor ckpt_x1 = tl::randn({2, 4});
+    tl::Tensor ckpt_x2({2, 4});
+    for (int64_t i = 0; i < ckpt_x1.numel(); ++i) ckpt_x2.data()[i] = ckpt_x1.data()[i];
+    ckpt_x1.set_requires_grad(true);
+    ckpt_x2.set_requires_grad(true);
+
+    // --- plain run (builds the full graph) ---
+    tl::Tensor ckpt_y1 = ckpt_block.forward(ckpt_x1);
+    ckpt_y1.backward(); // seeds dY = ones
+
+    // capture plain grads
+    std::vector<float> plain_xgrad(ckpt_x1.grad().data(),
+                                   ckpt_x1.grad().data() + ckpt_x1.grad().numel());
+    std::vector<std::vector<float>> plain_pgrad;
+    for (tl::Tensor* p : ckpt_params)
+      plain_pgrad.emplace_back(p->grad().data(), p->grad().data() + p->grad().numel());
+
+    // zero all grads before the wrapped run
+    ckpt_x1.grad() = tl::Tensor();
+    for (tl::Tensor* p : ckpt_params) p->grad() = tl::Tensor();
+
+    // --- wrapped run (silent forward + recompute in backward) ---
+    tl::nn::Checkpoint ckpt(&ckpt_block);
+    tl::Tensor ckpt_y2 = ckpt.forward(ckpt_x2);
+    ckpt_y2.backward(); // same seed: dY = ones
+
+    // forward outputs must match (silent forward == normal forward)
+    assert(ckpt_y2.numel() == ckpt_y1.numel());
+    for (int64_t i = 0; i < ckpt_y1.numel(); ++i)
+      assert(is_close_nn(ckpt_y2.data()[i], ckpt_y1.data()[i]));
+
+    // input-grads must match
+    assert(ckpt_x2.grad().numel() == (int64_t)plain_xgrad.size());
+    for (int64_t i = 0; i < ckpt_x2.grad().numel(); ++i)
+      assert(is_close_nn(ckpt_x2.grad().data()[i], plain_xgrad[i]));
+
+    // weight-grads must match (recompute produced the block's param grads)
+    for (size_t k = 0; k < ckpt_params.size(); ++k) {
+      assert(ckpt_params[k]->grad().numel() == (int64_t)plain_pgrad[k].size());
+      for (int64_t i = 0; i < ckpt_params[k]->grad().numel(); ++i)
+        assert(is_close_nn(ckpt_params[k]->grad().data()[i], plain_pgrad[k][i]));
+    }
+  }
+
+  // test Checkpoint: explicit double-count regression.
+  // With an identity-weight Linear, y == x, so seeding dY = ones gives an
+  // analytic input gradient of EXACTLY 1.0 per element (dX = ones @ W^T = ones).
+  // The old aliasing bug made CheckpointBackward accumulate the input gradient
+  // twice (dX = 2.0), so asserting the exact value 1.0 fails on the buggy code
+  // and passes only when the recompute uses independent grad storage.
+  {
+    tl::nn::Linear id_lin(3, 3, false); // no bias
+    tl::Tensor id_w = tl::zeros({3, 3});
+    id_w.data()[0] = 1.0f; id_w.data()[4] = 1.0f; id_w.data()[8] = 1.0f; // identity
+    id_lin.set_weight(id_w);
+
+    tl::nn::Checkpoint id_ckpt(&id_lin);
+
+    tl::Tensor id_x({1, 3});
+    id_x.data()[0] = 1.0f; id_x.data()[1] = 2.0f; id_x.data()[2] = 3.0f;
+    id_x.set_requires_grad(true);
+
+    tl::Tensor id_y = id_ckpt.forward(id_x);
+    // identity weight: output equals input
+    CHECK(is_close_nn(id_y.data()[0], 1.0f));
+    CHECK(is_close_nn(id_y.data()[1], 2.0f));
+    CHECK(is_close_nn(id_y.data()[2], 3.0f));
+
+    id_y.backward(); // dY = ones -> dX = ones @ I = ones
+    // exact analytic input grad is 1.0; the double-count bug yields 2.0
+    CHECK(id_x.grad().numel() == 3);
+    for (int64_t i = 0; i < id_x.grad().numel(); ++i)
+      CHECK(is_close_nn(id_x.grad().data()[i], 1.0f));
+  }
 
   std::cout << "nn tests passed" << std::endl;
 }
