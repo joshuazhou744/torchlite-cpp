@@ -1,5 +1,6 @@
 #include <tl/autograd.h>
 #include <tl/ops.h>
+#include <tl/nn.h>
 #include <tl/factory.h>
 
 #include <cstdint>
@@ -623,6 +624,25 @@ void FlashAttentionBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], dQ);  // Q
   accumulate_grad(inputs[1], dK);  // K
   accumulate_grad(inputs[2], dV);  // V
+}
+
+void CheckpointBackward::backward(const Tensor& grad_output) {
+  bool prev = grad_enabled();
+  grad_enabled() = true;
+
+  // copy saved_input into a fresh tensor with its own grad storage
+  // (a shallow copy shares grad_ with inputs[0], causing double-count on accumulate)
+  Tensor src = saved_input.contiguous();
+  Tensor x(src.sizes());
+  for (int64_t i = 0; i < src.numel(); ++i) x.data()[i] = src.data()[i];
+  x.set_requires_grad(true);
+
+  Tensor y = wrapped_->forward(x); // re-run block
+  y.grad() = grad_output; // connect local graph to main grad graph
+  y.backward(); // local backprop -> fills x.grad() and block weight grads
+
+  grad_enabled() = prev; // restore original grad guard
+  accumulate_grad(inputs[0], x.grad()); // hand input-grad upstream
 }
 
 } // tl

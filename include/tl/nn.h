@@ -32,6 +32,18 @@ private:
   std::vector<Module*> layers_;
 };
 
+// Checkpoint: module wrapper for gradient checkpointing
+class Checkpoint: public Module {
+public:
+  Checkpoint(Module* wrapped) : wrapped_(wrapped) {}
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return wrapped_->parameters(); }
+  std::vector<Tensor*> buffers() override { return wrapped_->buffers(); }
+  void set_training(bool t) override { wrapped_->set_training(t); }
+private:
+  Module* wrapped_;
+};
+
 // Linear layer: y = xW^T + b
 class Linear: public Module {
 public:

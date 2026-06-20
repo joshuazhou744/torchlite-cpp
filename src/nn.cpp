@@ -48,6 +48,21 @@ std::vector<Tensor*> Sequential::buffers() {
   return bufs;
 }
 
+// Checkpoint
+Tensor Checkpoint::forward(const Tensor& input) const {
+  // run block silently (no grad) so no intermediates are stored
+  bool prev = grad_enabled();
+  grad_enabled() = false;
+  Tensor output = wrapped_->forward(input);
+  grad_enabled() = prev;
+
+  if (auto fn = track<CheckpointBackward>(output, {&input})) {
+    fn->wrapped_ = wrapped_;
+    fn->saved_input = input;
+  }
+  return output;
+}
+
 // Linear layer
 Linear::Linear(int64_t in_features, int64_t out_features, bool use_bias)
   : weight_(scale(randn({in_features, out_features}), std::sqrt(2.0f / in_features))),

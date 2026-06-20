@@ -9,6 +9,8 @@
 
 namespace tl {
 
+namespace nn { class Module; } // forward declaration
+
 inline bool& grad_enabled() { static bool e = true; return e; }
 
 // traverse computation graph and clear all grad function pointers to save memory
@@ -29,6 +31,13 @@ public:
 
   // inputs that need gradients
   std::vector<Tensor> inputs;
+};
+
+class CheckpointBackward: public GradFunction {
+public:
+  nn::Module* wrapped_; // checkpointed block
+  Tensor saved_input; // seed
+  void backward(const Tensor& grad_output) override;
 };
 
 class AddBackward: public GradFunction {
