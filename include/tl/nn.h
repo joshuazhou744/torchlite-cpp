@@ -117,6 +117,7 @@ class MultiHeadAttention {
 public:
   MultiHeadAttention(int64_t d_model, int64_t num_heads);
   Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
+  Tensor forward(const Tensor& query, const Tensor& context, const Tensor& mask = Tensor()) const; // cross-attn forward
   void set_training(bool t);
 
   Linear& q_proj() { return q_proj_; }
@@ -172,6 +173,80 @@ public:
 
 private:
   std::vector<TransformerEncoderLayer> layers_;
+};
+
+// TransformerDecoderLayer: masked self-attn + cross-attn + FFN
+class TransformerDecoderLayer: public Module {
+public:
+  TransformerDecoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p = 0.1f);
+  Tensor forward(const Tensor& input, const Tensor& encoder_output, const Tensor& tgt_mask = Tensor()) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_training(bool t) override;
+
+  MultiHeadAttention& self_attn() { return self_attn_; }
+  MultiHeadAttention& cross_attn() { return cross_attn_; }
+  LayerNorm& norm1() { return norm1_; }
+  LayerNorm& norm2() { return norm2_; }
+  LayerNorm& norm3() { return norm3_; }
+  Linear& ff1() { return ff1_; }
+  Linear& ff2() { return ff2_; }
+private:
+  MultiHeadAttention self_attn_;
+  MultiHeadAttention cross_attn_;
+  LayerNorm norm1_, norm2_, norm3_;
+  Linear ff1_, ff2_;
+  Dropout dropout_;
+};
+
+// TransformerDecoder: stack of N decoder layers
+class TransformerDecoder: public Module {
+public:
+  TransformerDecoder(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p = 0.1f);
+  Tensor forward(const Tensor& input, const Tensor& encoder_output, const Tensor& tgt_mask = Tensor()) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_training(bool t) override;
+  TransformerDecoderLayer& layer(int64_t i) { return layers_[i]; }
+
+private:
+  std::vector<TransformerDecoderLayer> layers_;
+};
+
+// CausalTransformerLayer: decoder-only (GPT-style) transformer layer
+class CausalTransformerLayer: public Module {
+public:
+  CausalTransformerLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p = 0.1f);
+  Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_training(bool t) override;
+
+  MultiHeadAttention& self_attn() { return self_attn_; }
+  LayerNorm& norm1() { return norm1_; }
+  LayerNorm& norm2() { return norm2_; }
+  Linear& ff1() { return ff1_; }
+  Linear& ff2() { return ff2_; }
+
+private:
+  MultiHeadAttention self_attn_;
+  LayerNorm norm1_, norm2_;
+  Linear ff1_, ff2_;
+  Dropout dropout_;
+};
+
+// CausalTransformer: stack of N causal layers
+class CausalTransformer: public Module {
+public:
+  CausalTransformer(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p = 0.1f);
+  Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_training(bool t) override;
+  CausalTransformerLayer& layer(int64_t i) { return layers_[i]; }
+
+private:
+  std::vector<CausalTransformerLayer> layers_;
 };
 
 // PositionalEncoding: add sinusoidal position information to input tensors
