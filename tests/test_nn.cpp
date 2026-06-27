@@ -140,6 +140,21 @@ void test_nn() {
     assert(std::isfinite(msa_out.data()[i]));
   }
 
+  // test MSA cross-attention overload: query and context have different seq lengths
+  // output shape must be [batch, tgt_seq, d_model] — matches query, not context
+  {
+    tl::nn::MultiHeadAttention msa_cross(16, 4);
+    tl::Tensor xq = tl::randn({2, 5, 16});   // [batch=2, tgt_seq=5, d_model=16]
+    tl::Tensor xc = tl::randn({2, 8, 16});   // [batch=2, src_seq=8, d_model=16]
+    tl::Tensor cross_out = msa_cross.forward(xq, xc, tl::Tensor());
+    assert(cross_out.sizes().size() == 3);
+    assert(cross_out.sizes()[0] == 2);   // batch preserved
+    assert(cross_out.sizes()[1] == 5);   // tgt_seq from query, not context
+    assert(cross_out.sizes()[2] == 16);  // d_model preserved
+    for (int i = 0; i < cross_out.numel(); ++i)
+      assert(std::isfinite(cross_out.data()[i]));
+  }
+
   // test TransformerEncoderLayer: shape preserved
   tl::nn::TransformerEncoderLayer enc_layer(16, 4, 64); // d_model=16, 4 heads, d_ff=64
   tl::Tensor enc_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]
@@ -166,6 +181,21 @@ void test_nn() {
   // test output values are finite
   for (int i = 0; i < te_out.numel(); ++i) {
     assert(std::isfinite(te_out.data()[i]));
+  }
+
+  // test TransformerDecoderLayer: output shape matches [batch, tgt_seq, d_model]
+  // src_seq (8) differs from tgt_seq (5) to confirm cross-attention handles mismatched lengths
+  {
+    tl::nn::TransformerDecoderLayer dec_layer(16, 4, 64);
+    tl::Tensor dec_in  = tl::randn({2, 5, 16});  // [batch=2, tgt_seq=5, d_model=16]
+    tl::Tensor enc_out = tl::randn({2, 8, 16});  // [batch=2, src_seq=8, d_model=16]
+    tl::Tensor dec_out = dec_layer.forward(dec_in, enc_out);
+    assert(dec_out.sizes().size() == 3);
+    assert(dec_out.sizes()[0] == 2);
+    assert(dec_out.sizes()[1] == 5);   // tgt_seq preserved
+    assert(dec_out.sizes()[2] == 16);
+    for (int i = 0; i < dec_out.numel(); ++i)
+      assert(std::isfinite(dec_out.data()[i]));
   }
 
   // test PositionalEncoding: shape preserved

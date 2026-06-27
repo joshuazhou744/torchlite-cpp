@@ -117,7 +117,7 @@ class MultiHeadAttention {
 public:
   MultiHeadAttention(int64_t d_model, int64_t num_heads);
   Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
-  Tensor forward(const Tensor& query, const Tensor& context, const Tensor& mask = Tensor()) const; // cross-attn forward
+  Tensor forward(const Tensor& query, const Tensor& context, const Tensor& mask) const; // cross-attn forward
   void set_training(bool t);
 
   Linear& q_proj() { return q_proj_; }

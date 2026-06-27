@@ -263,7 +263,7 @@ Tensor MultiHeadAttention::forward(const Tensor& query, const Tensor& context, c
   // context: [batch, source_seq, d_model] from encoder
   int64_t batch = query.sizes()[0];
   int64_t target_seq = query.sizes()[1];
-  int64_t source_seq = context.sizes()[0];
+  int64_t source_seq = context.sizes()[1];
 
   Tensor q = q_proj_.forward(query);
   Tensor k = k_proj_.forward(context);
@@ -374,7 +374,7 @@ std::vector<Tensor*> TransformerEncoder::parameters() {
   return params;
 }
 
-// Transformer decoder layer
+// Transformer decoder layer (cross-attention)
 TransformerDecoderLayer::TransformerDecoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
   : self_attn_(d_model, num_heads),
     cross_attn_(d_model, num_heads),
@@ -420,7 +420,7 @@ Tensor TransformerDecoderLayer::forward(const Tensor& input, const Tensor& encod
   Tensor x = norm1_.forward(add(input, attn_out));
 
   // cross-attention block: Q from decoder, K/V from encoder
-  Tensor cross_out = cross_attn_.forward(x, encoder_output);
+  Tensor cross_out = cross_attn_.forward(x, encoder_output, Tensor());
   cross_out = dropout_.forward(cross_out);
   x = norm2_.forward(add(x, cross_out));
 
