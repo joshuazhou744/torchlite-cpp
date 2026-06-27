@@ -180,7 +180,7 @@ class TransformerDecoderLayer: public Module {
 public:
   TransformerDecoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p = 0.1f);
   Tensor forward(const Tensor& input, const Tensor& encoder_output, const Tensor& tgt_mask = Tensor()) const;
-  Tensor forward(const Tensor& input) const override;
+  Tensor forward(const Tensor& input) const override; // stub for Module override
   std::vector<Tensor*> parameters() override;
   void set_training(bool t) override;
 

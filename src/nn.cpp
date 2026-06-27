@@ -374,6 +374,69 @@ std::vector<Tensor*> TransformerEncoder::parameters() {
   return params;
 }
 
+// Transformer decoder layer
+TransformerDecoderLayer::TransformerDecoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
+  : self_attn_(d_model, num_heads),
+    cross_attn_(d_model, num_heads),
+    norm1_(d_model),
+    norm2_(d_model),
+    norm3_(d_model),
+    ff1_(d_model, d_ff),
+    ff2_(d_ff, d_model),
+    dropout_(dropout_p)
+{}
+
+void TransformerDecoderLayer::set_training(bool t) {
+  self_attn_.set_training(t);
+  cross_attn_.set_training(t);
+  norm1_.set_training(t);
+  norm2_.set_training(t);
+  norm3_.set_training(t);
+  ff1_.set_training(t);
+  ff2_.set_training(t);
+  dropout_.set_training(t);
+}
+
+std::vector<Tensor*> TransformerDecoderLayer::parameters() {
+  std::vector<Tensor*> params;
+  auto append = [&](auto& layer) {
+    auto p = layer.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  };
+  append(self_attn_);
+  append(cross_attn_);
+  append(norm1_);
+  append(norm2_);
+  append(norm3_);
+  append(ff1_);
+  append(ff2_);
+  return params;
+}
+
+Tensor TransformerDecoderLayer::forward(const Tensor& input, const Tensor& encoder_output, const Tensor& tgt_mask) const {
+  // masked self-attention block
+  Tensor attn_out = self_attn_.forward(input, tgt_mask);
+  attn_out = dropout_.forward(attn_out);
+  Tensor x = norm1_.forward(add(input, attn_out));
+
+  // cross-attention block: Q from decoder, K/V from encoder
+  Tensor cross_out = cross_attn_.forward(x, encoder_output);
+  cross_out = dropout_.forward(cross_out);
+  x = norm2_.forward(add(x, cross_out));
+
+  // feed-forward block
+  Tensor ff_out = ff2_.forward(gelu(ff1_.forward(x)));
+  ff_out = dropout_.forward(ff_out);
+  return norm3_.forward(add(x, ff_out));
+}
+
+// stub forward
+Tensor TransformerDecoderLayer::forward(const Tensor& input) const {
+  (void)input;
+  throw std::logic_error("TransformerDecoderLayer: use forward(input, encoder_output, tgt_mask)");
+}
+
+
 // Position encoding
 PositionalEncoding::PositionalEncoding(int64_t d_model, int64_t max_len)
   : pe_({max_len, d_model})
