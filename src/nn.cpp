@@ -257,6 +257,43 @@ Tensor MultiHeadAttention::forward(const Tensor& input, const Tensor& mask) cons
   return out_proj_.forward(out);
 }
 
+// cross-attention forward
+Tensor MultiHeadAttention::forward(const Tensor& query, const Tensor& context, const Tensor& mask) const {
+  // query: [batch, target_seq, d_model] from decoder
+  // context: [batch, source_seq, d_model] from encoder
+  int64_t batch = query.size()[0];
+  int64_t target_seq = query.size()[1];
+  int64_t source_seq = context.size()[0];
+
+  Tensor q = q_proj_.forward(query);
+  Tensor k = k_proj_.forward(context);
+  Tensor v = v_proj_.forward(context);
+
+  q = reshape(q, {batch, target_seq, num_heads_, head_dim_});
+  k = reshape(k, {batch, source_seq, num_heads_, head_dim_});
+  v = reshape(v, {batch, source_seq, num_heads_, head_dim_});
+
+  q = transpose(q, 1, 2);
+  k = transpose(k, 1, 2);
+  v = transpose(v, 1, 2);
+
+  // scores: [batch, num_heads, target_seq, source_seq]
+  Tensor score = matmul(q, transpose(k, -2, -1));
+  scores = scale(scores, 1.0f / std::sqrt(static_cast<float>(head_dim_)));
+
+  if (!mask.empty()) {
+    scores = add(scores, mask);
+  }
+
+  Tensor attn = softmax(scores);
+  Tensor out = matmul(attn, v); // [batch, num_heads, target_seq, head_dim]
+
+  out = transpose(out, 1, 2);
+  out = reshape(out, {batch, target_seq, d_model_});
+
+  return out_proj_.forward(out);
+}
+
 // Transformer encoder layer
 TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
   : msa_(d_model, num_heads),
