@@ -261,9 +261,9 @@ Tensor MultiHeadAttention::forward(const Tensor& input, const Tensor& mask) cons
 Tensor MultiHeadAttention::forward(const Tensor& query, const Tensor& context, const Tensor& mask) const {
   // query: [batch, target_seq, d_model] from decoder
   // context: [batch, source_seq, d_model] from encoder
-  int64_t batch = query.size()[0];
-  int64_t target_seq = query.size()[1];
-  int64_t source_seq = context.size()[0];
+  int64_t batch = query.sizes()[0];
+  int64_t target_seq = query.sizes()[1];
+  int64_t source_seq = context.sizes()[0];
 
   Tensor q = q_proj_.forward(query);
   Tensor k = k_proj_.forward(context);
@@ -278,7 +278,7 @@ Tensor MultiHeadAttention::forward(const Tensor& query, const Tensor& context, c
   v = transpose(v, 1, 2);
 
   // scores: [batch, num_heads, target_seq, source_seq]
-  Tensor score = matmul(q, transpose(k, -2, -1));
+  Tensor scores = matmul(q, transpose(k, -2, -1));
   scores = scale(scores, 1.0f / std::sqrt(static_cast<float>(head_dim_)));
 
   if (!mask.empty()) {
