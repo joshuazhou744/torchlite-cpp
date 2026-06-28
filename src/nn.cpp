@@ -436,6 +436,124 @@ Tensor TransformerDecoderLayer::forward(const Tensor& input) const {
   throw std::logic_error("TransformerDecoderLayer: use forward(input, encoder_output, tgt_mask)");
 }
 
+// Transformer decoder
+TransformerDecoder::TransformerDecoder(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p) {
+  for (int64_t i = 0; i < num_layers; ++i) {
+    layers_.emplace_back(d_model, num_heads, d_ff, dropout_p);
+  }
+}
+
+void TransformerDecoder::set_training(bool t) {
+  for (auto& layer: layers_) layer.set_training(t);
+}
+
+std::vector<Tensor*> TransformerDecoder::parameters() {
+  std::vector<Tensor*> params;
+  for (auto& layer: layers_) {
+    auto p = layer.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  }
+  return params;
+}
+
+Tensor TransformerDecoder::forward(const Tensor& input, const Tensor& encoder_output, const Tensor& tgt_mask) const {
+  Tensor x = input;
+  for (const auto& layer: layers_) {
+    x = layer.forward(x, encoder_output, tgt_mask);
+  }
+  return x;
+}
+
+// stub forward
+Tensor TransformerDecoder::forward(const Tensor& input) const {
+  (void)input;
+  throw std::logic_error("TransformerDecoder: use forward(input, encoder_output, tgt_mask)");
+}
+
+// Causal transformer layer
+CausalTransformerLayer::CausalTransformerLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
+  : self_attn_(d_model, num_heads),
+    norm1_(d_model),
+    norm2_(d_model),
+    ff1_(d_model, d_ff),
+    ff2_(d_ff, d_model),
+    dropout_(dropout_p)
+{}
+
+void CausalTransformerLayer::set_training(bool t) {
+  self_attn_.set_training(t);
+  norm1_.set_training(t);
+  norm2_.set_training(t);
+  ff1_.set_training(t);
+  ff2_.set_training(t);
+  dropout_.set_training(t);
+}
+
+std::vector<Tensor*> CausalTransformerLayer::parameters() {
+  std::vector<Tensor*> params;
+  auto append = [&](auto& layer) {
+    auto p = layer.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  };
+  append(self_attn_);
+  append(norm1_);
+  append(norm2_);
+  append(ff1_);
+  append(ff2_);
+  return params;
+}
+
+Tensor CausalTransformerLayer::forward(const Tensor& input, const Tensor& mask) const {
+  // masked self-attention block
+  Tensor attn_out = self_attn_.forward(input, mask);
+  attn_out = dropout_.forward(attn_out);
+  Tensor x = norm1_.forward(add(input, attn_out));
+
+  // feed-forward block
+  Tensor ff_out = ff1_.forward(x);
+  ff_out = gelu(ff_out);
+  ff_out = ff2_.forward(ff_out);
+  ff_out = dropout_.forward(ff_out);
+  return norm2_.forward(add(x, ff_out));
+}
+
+// satisfy virtual forward, identical to TransformerEncoderLayer forward
+Tensor CausalTransformerLayer::forward(const Tensor& input) const {
+  return forward(input, Tensor());
+}
+
+// Causal transformer
+CausalTransformer::CausalTransformer(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout) {
+  for (int64_t i = 0; i < num_layers; ++i) {
+    layers_.emplace_back(d_model, num_heads, d_ff, dropout);
+  }
+}
+
+void CausalTransformer::set_training(bool t) {
+  for (auto& layer: layers_) layer.set_training(t);
+}
+
+std::vector<Tensor*> CausalTransformer::parameters() {
+  std::vector<Tensor*> params;
+  for (auto& layer: layers_) {
+    auto p = layer.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  }
+  return params;
+}
+
+Tensor CausalTransformer::forward(const Tensor& input, const Tensor& mask) const {
+  Tensor x = input;
+  for (const auto& layer: layers_) {
+    x = layer.forward(x, mask);
+  }
+  return x;
+}
+
+// satisfy virtual forward, identical to TransformerEncoderLayer forward
+Tensor CausalTransformer::forward(const Tensor& input) const {
+  return forward(input, Tensor());
+}
 
 // Position encoding
 PositionalEncoding::PositionalEncoding(int64_t d_model, int64_t max_len)

@@ -198,6 +198,46 @@ void test_nn() {
       assert(std::isfinite(dec_out.data()[i]));
   }
 
+  // test TransformerDecoder: shape preserved through multiple layers, mismatched seq lengths
+  {
+    tl::nn::TransformerDecoder decoder(16, 4, 64, 3); // d_model=16, 4 heads, d_ff=64, 3 layers
+    tl::Tensor td_in  = tl::randn({2, 5, 16});  // [batch=2, tgt_seq=5, d_model=16]
+    tl::Tensor td_enc = tl::randn({2, 8, 16});  // [batch=2, src_seq=8, d_model=16]
+    tl::Tensor td_out = decoder.forward(td_in, td_enc);
+    assert(td_out.sizes().size() == 3);
+    assert(td_out.sizes()[0] == 2);
+    assert(td_out.sizes()[1] == 5);   // tgt_seq preserved through all layers
+    assert(td_out.sizes()[2] == 16);
+    for (int i = 0; i < td_out.numel(); ++i)
+      assert(std::isfinite(td_out.data()[i]));
+  }
+
+  // test CausalTransformerLayer: shape preserved, no mask
+  {
+    tl::nn::CausalTransformerLayer causal_layer(16, 4, 64);
+    tl::Tensor cl_in  = tl::randn({2, 5, 16});
+    tl::Tensor cl_out = causal_layer.forward(cl_in, tl::Tensor());
+    assert(cl_out.sizes().size() == 3);
+    assert(cl_out.sizes()[0] == 2);
+    assert(cl_out.sizes()[1] == 5);
+    assert(cl_out.sizes()[2] == 16);
+    for (int i = 0; i < cl_out.numel(); ++i)
+      assert(std::isfinite(cl_out.data()[i]));
+  }
+
+  // test CausalTransformer: shape preserved through multiple layers
+  {
+    tl::nn::CausalTransformer causal(16, 4, 64, 3);
+    tl::Tensor ct_in  = tl::randn({2, 5, 16});
+    tl::Tensor ct_out = causal.forward(ct_in, tl::Tensor());
+    assert(ct_out.sizes().size() == 3);
+    assert(ct_out.sizes()[0] == 2);
+    assert(ct_out.sizes()[1] == 5);
+    assert(ct_out.sizes()[2] == 16);
+    for (int i = 0; i < ct_out.numel(); ++i)
+      assert(std::isfinite(ct_out.data()[i]));
+  }
+
   // test PositionalEncoding: shape preserved
   tl::nn::PositionalEncoding pe(16);
   tl::Tensor pe_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]
