@@ -214,13 +214,12 @@ private:
 };
 
 // CausalTransformerLayer: decoder-only (GPT-style) transformer layer
-class CausalTransformerLayer: public Module {
+class CausalTransformerLayer {
 public:
   CausalTransformerLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p = 0.1f);
   Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
-  Tensor forward(const Tensor& input) const override;
-  std::vector<Tensor*> parameters() override;
-  void set_training(bool t) override;
+  std::vector<Tensor*> parameters();
+  void set_training(bool t);
 
   MultiHeadAttention& self_attn() { return self_attn_; }
   LayerNorm& norm1() { return norm1_; }
@@ -236,13 +235,12 @@ private:
 };
 
 // CausalTransformer: stack of N causal layers
-class CausalTransformer: public Module {
+class CausalTransformer {
 public:
   CausalTransformer(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout_p = 0.1f);
   Tensor forward(const Tensor& input, const Tensor& mask = Tensor()) const;
-  Tensor forward(const Tensor& input) const override;
-  std::vector<Tensor*> parameters() override;
-  void set_training(bool t) override;
+  std::vector<Tensor*> parameters();
+  void set_training(bool t);
   CausalTransformerLayer& layer(int64_t i) { return layers_[i]; }
 
 private:

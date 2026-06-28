@@ -216,7 +216,7 @@ void test_nn() {
   {
     tl::nn::CausalTransformerLayer causal_layer(16, 4, 64);
     tl::Tensor cl_in  = tl::randn({2, 5, 16});
-    tl::Tensor cl_out = causal_layer.forward(cl_in, tl::Tensor());
+    tl::Tensor cl_out = causal_layer.forward(cl_in);
     assert(cl_out.sizes().size() == 3);
     assert(cl_out.sizes()[0] == 2);
     assert(cl_out.sizes()[1] == 5);
@@ -229,7 +229,7 @@ void test_nn() {
   {
     tl::nn::CausalTransformer causal(16, 4, 64, 3);
     tl::Tensor ct_in  = tl::randn({2, 5, 16});
-    tl::Tensor ct_out = causal.forward(ct_in, tl::Tensor());
+    tl::Tensor ct_out = causal.forward(ct_in);
     assert(ct_out.sizes().size() == 3);
     assert(ct_out.sizes()[0] == 2);
     assert(ct_out.sizes()[1] == 5);

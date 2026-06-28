@@ -517,11 +517,6 @@ Tensor CausalTransformerLayer::forward(const Tensor& input, const Tensor& mask) 
   return norm2_.forward(add(x, ff_out));
 }
 
-// satisfy virtual forward, identical to TransformerEncoderLayer forward
-Tensor CausalTransformerLayer::forward(const Tensor& input) const {
-  return forward(input, Tensor());
-}
-
 // Causal transformer
 CausalTransformer::CausalTransformer(int64_t d_model, int64_t num_heads, int64_t d_ff, int64_t num_layers, float dropout) {
   for (int64_t i = 0; i < num_layers; ++i) {
@@ -548,11 +543,6 @@ Tensor CausalTransformer::forward(const Tensor& input, const Tensor& mask) const
     x = layer.forward(x, mask);
   }
   return x;
-}
-
-// satisfy virtual forward, identical to TransformerEncoderLayer forward
-Tensor CausalTransformer::forward(const Tensor& input) const {
-  return forward(input, Tensor());
 }
 
 // Position encoding
