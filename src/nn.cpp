@@ -711,6 +711,43 @@ Tensor GroupNorm::forward(const Tensor& input) const {
   return add(mul(normed, g), b);
 }
 
+// Adaptive group normalization
+AdaptiveGroupNorm::AdaptiveGroupNorm(int64_t num_groups, int64_t num_channels, int64_t cond_dim)
+  : norm_(num_groups, num_channels),
+    proj_(cond_dim, 2*num_channels)
+{}
+
+std::vector<Tensor*> AdaptiveGroupNorm::parameters() {
+  return proj_.parameters();
+}
+
+Tensor AdaptiveGroupNorm::forward(const Tensor& input, const Tensor& cond) const {
+  // input: [N, C, H, W], cond: [N, cond_dim]
+  int64_t N = input.sizes()[0];
+  int64_t C = input.sizes()[1];
+
+  Tensor normed = norm_.forward(input); // pure normalization, gamma=1, beta=0
+
+  // project cond -> [N, 2*C], split into gamma and beta
+  Tensor scale_shift = proj_.forward(cond);
+  Tensor gamma = slice(scale_shift, 1, 0, C); // [N, C]
+  Tensor beta = slice(scale_shift, 1, C, 2*C); // [N, C]
+
+  // reshape to [N, C, 1, 1] for broadcasting over H, W
+  std::vector<int64_t> shape(input.sizes().size(), 1);
+  shape[0] = N;
+  shape[1] = C;
+  gamma = reshape(gamma, shape);
+  beta = reshape(beta, shape);
+
+  return add(mul(normed, gamma), beta);
+}
+
+Tensor AdaptiveGroupNorm::forward(const Tensor& input) const {
+  (void) input;
+  throw std::logic_error("AdaptiveGroupNorm: use forward(input, cond)");
+}
+
 // Input normalization
 InputNormalize::InputNormalize()
   : mean_(zeros({1})),

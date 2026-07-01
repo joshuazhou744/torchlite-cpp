@@ -162,6 +162,40 @@ void test_nn() {
     assert(gn_params[1]->numel() == 4);
   }
 
+  // test AdaptiveGroupNorm: output shape preserved, different cond -> different output
+  {
+    tl::nn::AdaptiveGroupNorm agn(2, 4, 8); // 2 groups, 4 channels, cond_dim=8
+
+    tl::Tensor agn_in  = tl::randn({2, 4, 4, 4}); // [N=2, C=4, H=4, W=4]
+    tl::Tensor cond1   = tl::randn({2, 8});         // conditioning vector
+    tl::Tensor cond2   = tl::randn({2, 8});         // different conditioning
+
+    tl::Tensor out1 = agn.forward(agn_in, cond1);
+    tl::Tensor out2 = agn.forward(agn_in, cond2);
+
+    // output shape matches input
+    assert(out1.sizes().size() == 4);
+    assert(out1.sizes()[0] == 2);
+    assert(out1.sizes()[1] == 4);
+    assert(out1.sizes()[2] == 4);
+    assert(out1.sizes()[3] == 4);
+
+    // all values finite
+    for (int i = 0; i < out1.numel(); ++i)
+      assert(std::isfinite(out1.data()[i]));
+
+    // different cond -> different output (conditioning actually changes output)
+    bool any_diff = false;
+    for (int i = 0; i < out1.numel(); ++i) {
+      if (!is_close_nn(out1.data()[i], out2.data()[i])) { any_diff = true; break; }
+    }
+    assert(any_diff);
+
+    // only proj_ params exposed: weight [8->8] + bias [8] = 2 tensors
+    auto agn_params = agn.parameters();
+    assert(agn_params.size() == 2); // proj_ weight + bias
+  }
+
   // test MultiHeadAttention: shape check
   tl::nn::MultiHeadAttention msa(16, 4); // d_model=16, 4 heads of dim 4
   tl::Tensor msa_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]

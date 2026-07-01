@@ -354,6 +354,18 @@ private:
   float eps_;
 };
 
+// AdaptiveGroupNorm: GroupNorm with gamma and beta computed from a conditioning vector
+class AdaptiveGroupNorm: public Module {
+public:
+  AdaptiveGroupNorm(int64_t num_groups, int64_t num_channels, int64_t cond_dim);
+  Tensor forward(const Tensor& input, const Tensor& cond) const;
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+private:
+  GroupNorm norm_;
+  Linear proj_; // cond_dim -> 2 * num_channels (gamma and beta)
+};
+
 // InputNormalize: scalar (x - mean) / std_deviation applied to input
 // stats (mean and std_deviation) stored as buffers
 class InputNormalize: public Module {
