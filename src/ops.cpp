@@ -1575,5 +1575,38 @@ Tensor avg_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride, int6
   return out;
 }
 
+// cosine
+Tensor cos(const Tensor& input) {
+  Tensor out(input.sizes());
+  const float* ip = input.data();
+  float* op = out.data();
+  for (int64_t i = 0; i < input.numel(); ++i) {
+    op[i] = std::cos(ip[i]);
+  }
+
+  if (input.requires_grad) {
+    if (auto fn = track<CosBackward>(out, {&input})) {
+      fn->input_cache = input;
+    }
+  }
+  return out;
+}
+
+// sine
+Tensor sin(const Tensor& input) {
+  Tensor out(input.sizes());
+  const float* ip = input.data();
+  float* op = out.data();
+  for (int64_t i = 0; i < input.numel(); ++i) {
+    op[i] = std::sin(ip[i]);
+  }
+
+  if (input.requires_grad) {
+    if (auto fn = track<SinBackward>(out, {&input})) {
+      fn->input_cache = input;
+    }
+  }
+  return out;
+}
 
 }

@@ -90,4 +90,10 @@ Tensor max_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride = 0, 
 // avg pooling: take average over each window sized (kernel_size, kernel_size)
 Tensor avg_pool2d(const Tensor& input, int64_t kernel_size, int64_t stride = 0, int64_t padding = 0);
 
+// cos: take cosine of entire tensor
+Tensor cos(const Tensor& input);
+
+// sin: take sine of entire tensor
+Tensor sin(const Tensor& input);
+
 }

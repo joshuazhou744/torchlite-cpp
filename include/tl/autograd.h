@@ -201,6 +201,18 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class CosBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
+class SinBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
 // Helper functions
 
 template<typename BackwardFn>

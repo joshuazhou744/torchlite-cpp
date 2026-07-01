@@ -645,4 +645,32 @@ void CheckpointBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], x.grad()); // hand input-grad upstream
 }
 
+void CosBackward::backward(const Tensor& grad_output) {
+  // d(cos(x))/dx = -sin(x)
+  Tensor x = input_cache.contiguous();
+  Tensor g = grad_output.contiguous();
+  Tensor result(x.sizes());
+  const float* xp = x.data();
+  const float* gp = g.data();
+  float* rp = result.data();
+  for (int64_t i = 0; i < x.numel(); ++i) {
+    rp[i] = -gp[i] * std::sin(xp[i]);
+  }
+  accumulate_grad(inputs[0], result);
+}
+
+void SinBackward::backward(const Tensor& grad_output) {
+  // d(sin(x))/dx = cos(x)
+  Tensor x = input_cache.contiguous();
+  Tensor g = grad_output.contiguous();
+  Tensor result(x.sizes());
+  const float* xp = x.data();
+  const float* gp = g.data();
+  float* rp = result.data();
+  for (int64_t i = 0; i < x.numel(); ++i) {
+    rp[i] = gp[i] * std::cos(xp[i]);
+  }
+  accumulate_grad(inputs[0], result);
+}
+
 } // tl

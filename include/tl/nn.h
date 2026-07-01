@@ -393,5 +393,18 @@ private:
   int64_t dim_;
 };
 
+// FourierFeatures: random fourier features for noise level embedding
+// weight: fixed random [1, cond_channels / 2]
+class FourierFeatures: public Module {
+public:
+  FourierFeatures(int64_t cond_channels);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return {}; }
+  std::vector<Tensor*> buffers() override { return {&weight_}; }
+
+private:
+  Tensor weight_; // random frequencies for random resolution
+};
+
 } // nn
 } // tl

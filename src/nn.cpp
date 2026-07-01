@@ -810,5 +810,23 @@ Tensor TimestepEmbedding::forward(const Tensor& sigma) const {
   return fc2_.forward(x);
 }
 
+// Fourier features
+FourierFeatures::FourierFeatures(int64_t cond_channels)
+  : weight_(randn({1, cond_channels / 2}))
+{
+  if (cond_channels % 2 != 0) {
+    throw std::invalid_argument("FourierFeatures: cond_channels must be even");
+  }
+  weight_.requires_grad = false;
+}
+
+Tensor FourierFeatures::forward(const Tensor& input) const {
+  // input: [N] -> unsqueeze to [N, 1]
+  Tensor x = reshape(input, {input.sizes()[0], 1});
+  // [N, 1] @ [1, cond_channels / 2] -> [N, cond_channels / 2]
+  Tensor f = mul(matmul(x, weight_), 2.0f * M_PI);
+  return cat(cos(f), sin(f), 1); // [N, cond_channels]
+}
+
 }
 }
