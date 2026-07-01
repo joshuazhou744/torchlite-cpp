@@ -528,5 +528,41 @@ void test_nn() {
     assert(te_params.size() == 4); // fc1 weight, fc1 bias, fc2 weight, fc2 bias
   }
 
+  // test FourierFeatures: output shape, no parameters, same sigma -> same output
+  {
+    tl::nn::FourierFeatures ff(256);
+
+    // no learned parameters
+    assert(ff.parameters().empty());
+
+    // output shape: [N, cond_dim]
+    tl::Tensor sigma({3});
+    sigma.data()[0] = 0.1f; sigma.data()[1] = 0.5f; sigma.data()[2] = 2.0f;
+    tl::Tensor out = ff.forward(sigma);
+    assert(out.sizes().size() == 2);
+    assert(out.sizes()[0] == 3);
+    assert(out.sizes()[1] == 256);
+
+    // all values finite and in [-1, 1] since they are cos/sin
+    for (int i = 0; i < out.numel(); ++i) {
+      assert(std::isfinite(out.data()[i]));
+      assert(out.data()[i] >= -1.0f && out.data()[i] <= 1.0f);
+    }
+
+    // same input -> same output (deterministic after init)
+    tl::Tensor out2 = ff.forward(sigma);
+    for (int i = 0; i < out.numel(); ++i)
+      assert(is_close(out.data()[i], out2.data()[i]));
+
+    // different sigma -> different output
+    tl::Tensor sigma2({3});
+    sigma2.data()[0] = 0.9f; sigma2.data()[1] = 1.5f; sigma2.data()[2] = 3.0f;
+    tl::Tensor out3 = ff.forward(sigma2);
+    bool any_diff = false;
+    for (int i = 0; i < out.numel(); ++i)
+      if (!is_close(out.data()[i], out3.data()[i])) { any_diff = true; break; }
+    assert(any_diff);
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }

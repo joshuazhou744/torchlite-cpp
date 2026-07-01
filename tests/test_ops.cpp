@@ -501,5 +501,29 @@ void test_ops() {
     std::cout << "  flash_attention backward ok\n";
   }
 
+  // test cos: cos(0)=1, cos(pi)=-1, cos(pi/2)~0
+  {
+    tl::Tensor t({3});
+    t.data()[0] = 0.0f;
+    t.data()[1] = (float)M_PI;
+    t.data()[2] = (float)M_PI / 2.0f;
+    tl::Tensor c = tl::cos(t);
+    assert(is_close(c.data()[0],  1.0f, 1e-6f));
+    assert(is_close(c.data()[1], -1.0f, 1e-6f));
+    assert(is_close(c.data()[2],  0.0f, 1e-6f));
+  }
+
+  // test sin: sin(0)=0, sin(pi)~0, sin(pi/2)=1
+  {
+    tl::Tensor t({3});
+    t.data()[0] = 0.0f;
+    t.data()[1] = (float)M_PI;
+    t.data()[2] = (float)M_PI / 2.0f;
+    tl::Tensor s = tl::sin(t);
+    assert(is_close(s.data()[0], 0.0f, 1e-6f));
+    assert(is_close(s.data()[1], 0.0f, 1e-5f));
+    assert(is_close(s.data()[2], 1.0f, 1e-6f));
+  }
+
   std::cout << "ops tests passed" << std::endl;
 }

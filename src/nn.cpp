@@ -824,7 +824,7 @@ Tensor FourierFeatures::forward(const Tensor& input) const {
   // input: [N] -> unsqueeze to [N, 1]
   Tensor x = reshape(input, {input.sizes()[0], 1});
   // [N, 1] @ [1, cond_dim / 2] -> [N, cond_dim / 2]
-  Tensor f = mul(matmul(x, weight_), 2.0f * M_PI);
+  Tensor f = scale(matmul(x, weight_), 2.0f * (float)M_PI);
   return cat({cos(f), sin(f)}, 1); // [N, cond_dim]
 }
 
