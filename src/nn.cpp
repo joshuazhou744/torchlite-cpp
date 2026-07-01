@@ -567,19 +567,19 @@ Tensor PositionalEncoding::forward(const Tensor& input) const {
   return add(input, pe_slice); // broadcast add accross batch
 }
 
-// Upsample 2D
-Upsample2d::Upsample2d(int64_t scale_factor, int64_t in_channels)
+// Upsample
+Upsample::Upsample(int64_t scale_factor, int64_t in_channels)
   : scale_factor_(scale_factor),
     in_channels_(in_channels),
     conv_(std::max(in_channels, int64_t(1)), std::max(in_channels, int64_t(1)), 3, 1, 1)
 {}
 
-std::vector<Tensor*> Upsample2d::parameters() {
+std::vector<Tensor*> Upsample::parameters() {
   if (in_channels_ > 0) return conv_.parameters();
   return {};
 }
 
-Tensor Upsample2d::forward(const Tensor& input) const {
+Tensor Upsample::forward(const Tensor& input) const {
   // input: [N, C, H, W]
   int64_t N = input.sizes()[0];
   int64_t C = input.sizes()[1];
@@ -611,6 +611,15 @@ Tensor Upsample2d::forward(const Tensor& input) const {
     return conv_.forward(out);
   }
   return out;
+}
+
+// Downsample
+Downsample::Downsample(int64_t in_channels)
+  : conv_(in_channels, in_channels, 3, 2, 1) // kernel_size=3, stride=2, padding=1
+{}
+
+Tensor Downsample::forward(const Tensor& input) const {
+  return conv_.forward(input);
 }
 
 // Batch norm 2D

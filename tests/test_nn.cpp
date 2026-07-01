@@ -381,10 +381,10 @@ void test_nn() {
   assert(is_close(maxpool_def_out.data()[0], 6.0f));
   assert(is_close(maxpool_def_out.data()[3], 16.0f));
 
-  // test Upsample2d: scale_factor=2 on (1,1,2,2) input [[1,2],[3,4]]
+  // test Upsample: scale_factor=2 on (1,1,2,2) input [[1,2],[3,4]]
   // each pixel repeated 2x in H and W -> (1,1,4,4)
   {
-    tl::nn::Upsample2d up(2);
+    tl::nn::Upsample up(2);
     tl::Tensor up_in({1, 1, 2, 2});
     up_in.data()[0] = 1.0f; up_in.data()[1] = 2.0f;
     up_in.data()[2] = 3.0f; up_in.data()[3] = 4.0f;
@@ -404,9 +404,9 @@ void test_nn() {
     assert(is_close(up_out.data()[15], 4.0f));  // row3, col3
   }
 
-  // test Upsample2d with in_channels > 0: output shape correct, has parameters
+  // test Upsample with in_channels > 0: output shape correct, has parameters
   {
-    tl::nn::Upsample2d up(2, 4); // scale=2, in_channels=4 -> conv applied after
+    tl::nn::Upsample up(2, 4); // scale=2, in_channels=4 -> conv applied after
     tl::Tensor up_in = tl::randn({2, 4, 8, 8});
     tl::Tensor up_out = up.forward(up_in);
     // spatial dims doubled

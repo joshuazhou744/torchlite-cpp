@@ -297,16 +297,26 @@ private:
   int64_t kernel_size_, stride_, padding_;
 };
 
-// Upsample2d: nearest-neighbour spatial upsampling by integer scale factor
-class Upsample2d: public Module {
+// Upsample: nearest-neighbour spatial upsampling by integer scale factor
+class Upsample: public Module {
 public:
-  Upsample2d(int64_t scale_factor, int64_t in_channels = 0);
+  Upsample(int64_t scale_factor, int64_t in_channels = 0);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
 private:
   int64_t scale_factor_;
   int64_t in_channels_;
   Conv2d conv_; // when in_channels > 0
+};
+
+// Downsample: strided conv2d to halve spatial dimensions
+class Downsample: public Module {
+public:
+  Downsample(int64_t in_channels);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return conv_.parameters(); }
+private:
+  Conv2d conv_; // stride = 2 to halve
 };
 
 // BatchNorm2d: normalize per channel across (N, H, W)
