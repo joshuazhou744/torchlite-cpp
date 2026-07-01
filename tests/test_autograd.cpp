@@ -370,5 +370,20 @@ void test_autograd() {
     std::cout << "  AvgPool2dBackward ok\n";
   }
 
+  // SiLUBackward: d/dx[x*sigmoid(x)] = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
+  // at x=1: sig(1)=0.7311, grad = 0.7311 + 1*0.7311*0.2689 = 0.9277
+  // silu is composed of mul+sigmoid so no dedicated backward needed — tests the chain
+  {
+    tl::Tensor x({1});
+    x.data()[0] = 1.0f;
+    x.set_requires_grad(true);
+
+    tl::Tensor y = tl::silu(x);
+    y.backward();
+
+    assert(close(x.grad().data()[0], 0.9277f, 1e-3));
+    std::cout << "  SiLUBackward ok\n";
+  }
+
   std::cout << "autograd tests passed.\n";
 }

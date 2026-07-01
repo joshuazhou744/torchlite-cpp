@@ -13,4 +13,7 @@ Tensor gelu(const Tensor& input);
 // Sigmoid activation function: out[i] = 1 / (1 + exp(-in[i]))
 Tensor sigmoid(const Tensor& input);
 
+// SiLU activation function: out[i] = x * sigmoid(x)
+Tensor silu(const Tensor& input);
+
 }

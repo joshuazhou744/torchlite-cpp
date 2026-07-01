@@ -118,6 +118,50 @@ void test_nn() {
   assert(bn_params[0]->numel() == 3);
   assert(bn_params[1]->numel() == 3);
 
+  // test GroupNorm: 4 channels, 2 groups -> normalize over pairs of channels
+  // input [N=2, C=4, H=2, W=2]: fill group 0 (ch 0-1) with scale 1, group 1 (ch 2-3) with scale 100
+  // post-norm each group should have mean ~0 and variance ~1
+  {
+    tl::nn::GroupNorm gn(2, 4); // 2 groups, 4 channels
+    tl::Tensor gn_in({2, 4, 2, 2});
+    for (int64_t n = 0; n < 2; ++n) {
+      for (int64_t c = 0; c < 4; ++c) {
+        float scale = (c < 2) ? 1.0f : 100.0f;
+        for (int64_t h = 0; h < 2; ++h) {
+          for (int64_t w = 0; w < 2; ++w) {
+            int64_t idx = n*16 + c*4 + h*2 + w;
+            gn_in.data()[idx] = scale * (float)(h*2 + w + 1); // 1,2,3,4 scaled
+          }
+        }
+      }
+    }
+    tl::Tensor gn_out = gn.forward(gn_in);
+    assert(gn_out.sizes().size() == 4);
+    assert(gn_out.sizes()[0] == 2);
+    assert(gn_out.sizes()[1] == 4);
+    assert(gn_out.sizes()[2] == 2);
+    assert(gn_out.sizes()[3] == 2);
+
+    // each group per batch item should have mean ~0
+    for (int64_t n = 0; n < 2; ++n) {
+      for (int64_t g = 0; g < 2; ++g) {
+        float group_mean = 0.0f;
+        for (int64_t c = g*2; c < g*2+2; ++c)
+          for (int64_t h = 0; h < 2; ++h)
+            for (int64_t w = 0; w < 2; ++w)
+              group_mean += gn_out.data()[n*16 + c*4 + h*2 + w];
+        group_mean /= 8.0f; // 2 channels * 2H * 2W
+        assert(is_close_nn(group_mean, 0.0f, 1e-4));
+      }
+    }
+
+    // parameter count: gamma and beta each [C=4]
+    auto gn_params = gn.parameters();
+    assert(gn_params.size() == 2);
+    assert(gn_params[0]->numel() == 4);
+    assert(gn_params[1]->numel() == 4);
+  }
+
   // test MultiHeadAttention: shape check
   tl::nn::MultiHeadAttention msa(16, 4); // d_model=16, 4 heads of dim 4
   tl::Tensor msa_in = tl::randn({2, 5, 16}); // [batch=2, seq=5, d_model=16]

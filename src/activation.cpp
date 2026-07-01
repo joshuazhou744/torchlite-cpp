@@ -1,5 +1,6 @@
 #include <tl/activation.h>
 #include <tl/autograd.h>
+#include <tl/ops.h>
 
 #include <cmath> // exp, tanh, sqrt
 #include <algorithm> // max
@@ -70,6 +71,12 @@ Tensor gelu(const Tensor& input) {
   }
 
   return out;
+}
+
+// SiLU
+Tensor silu(const Tensor& input) {
+  // autograd already handled by mul and sigmoid
+  return mul(input, sigmoid(input));
 }
 
 }

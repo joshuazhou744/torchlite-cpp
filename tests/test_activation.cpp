@@ -36,5 +36,16 @@ void test_activation() {
   assert(is_close_act(res_gelu.data()[1], 0.8412f, 1e-4));
   assert(is_close_act(res_gelu.data()[2], -0.0036f, 1e-3));
 
+  // test SiLU: silu(x) = x * sigmoid(x)
+  // silu(0) = 0 * 0.5 = 0
+  // silu(1) = 1 * sigmoid(1) = 1 * 0.7311 = 0.7311
+  // silu(-5) ~ -5 * 0.0067 ~ -0.0335 (nearly zero for large negative)
+  tl::Tensor s({3});
+  s.data()[0] = 0.0f; s.data()[1] = 1.0f; s.data()[2] = -5.0f;
+  tl::Tensor res_silu = tl::silu(s);
+  assert(is_close_act(res_silu.data()[0], 0.0f));
+  assert(is_close_act(res_silu.data()[1], 0.7311f, 1e-4));
+  assert(is_close_act(res_silu.data()[2], -0.0335f, 1e-3));
+
   std::cout << "activation tests passed" << std::endl;
 }
