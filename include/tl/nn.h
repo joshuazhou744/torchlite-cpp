@@ -368,5 +368,18 @@ private:
   mutable Tensor std_; // [1]
 };
 
+// TimestepEmbedding: maps scalar noise level sigma to conditioning vector
+// log(sigma) -> sinusoidal encoding -> Linear -> SiLU -> Linear
+class TimestepEmbedding: public Module {
+public:
+  TimestepEmbedding(int64_t dim, int64_t out_dim);
+  Tensor forward(const Tensor& sigma) const override; // sigma: [N]
+  std::vector<Tensor*> parameters() override;
+private:
+  Linear fc1_;
+  Linear fc2_;
+  int64_t dim_;
+};
+
 } // nn
 } // tl

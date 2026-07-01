@@ -727,5 +727,51 @@ void InputNormalize::set_stats(float m, float s) {
   std_.data()[0] = s;
 }
 
+// Timestep embedding
+TimestepEmbedding::TimestepEmbedding(int64_t dim, int64_t out_dim)
+  : fc1_(dim, out_dim),
+    fc2_(out_dim, out_dim),
+    dim_(dim)
+{
+  if (dim % 2 != 0) {
+    throw std::invalid_argument("TimestepEmbedding: dim must be even");
+  }
+}
+
+std::vector<Tensor*> TimestepEmbedding::parameters() {
+  std::vector<Tensor*> params;
+  auto p1 = fc1_.parameters();
+  auto p2 = fc2_.parameters();
+  params.insert(params.end(), p1.begin(), p1.end());
+  params.insert(params.end(), p2.begin(), p2.end());
+  return params;
+}
+
+Tensor TimestepEmbedding::forward(const Tensor& sigma) const {
+  // sigma: [N], batch of scalars
+  int64_t N = sigma.sizes()[0];
+  int64_t half = dim_ / 2;
+
+  // sinusoidal encoding of log(sigma): [N, dim]
+  Tensor emb({N, dim_});
+  float* ep = emb.data();
+  const float* sp = sigma.data();
+
+  for (int64_t n = 0; n < N; ++n) {
+    float log_sigma = std::log(sp[n]);
+    for (int64_t i = 0; i < half; ++i) {
+      float freq = std::exp(-std::log(10000.0f) * i / (half - 1));
+      float angle = log_sigma * freq;
+      ep[n * dim_ + i] = std::sin(angle);
+      ep[n * dim_ + half + i] = std::cos(angle);
+    }
+  }
+
+  // Linear -> SiLU -> Linear
+  Tensor x = fc1_.forward(emb);
+  x = silu(x);
+  return fc2_.forward(x);
+}
+
 }
 }
