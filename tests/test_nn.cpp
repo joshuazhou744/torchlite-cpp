@@ -351,6 +351,29 @@ void test_nn() {
   assert(is_close_nn(maxpool_def_out.data()[0], 6.0f));
   assert(is_close_nn(maxpool_def_out.data()[3], 16.0f));
 
+  // test Upsample2d: scale_factor=2 on (1,1,2,2) input [[1,2],[3,4]]
+  // each pixel repeated 2x in H and W -> (1,1,4,4)
+  {
+    tl::nn::Upsample2d up(2);
+    tl::Tensor up_in({1, 1, 2, 2});
+    up_in.data()[0] = 1.0f; up_in.data()[1] = 2.0f;
+    up_in.data()[2] = 3.0f; up_in.data()[3] = 4.0f;
+    tl::Tensor up_out = up.forward(up_in);
+    assert(up_out.sizes().size() == 4);
+    assert(up_out.sizes()[0] == 1);
+    assert(up_out.sizes()[1] == 1);
+    assert(up_out.sizes()[2] == 4);
+    assert(up_out.sizes()[3] == 4);
+    // top-left 2x2 block all == 1, top-right 2x2 block all == 2
+    assert(is_close_nn(up_out.data()[0],  1.0f));  // row0, col0
+    assert(is_close_nn(up_out.data()[1],  1.0f));  // row0, col1
+    assert(is_close_nn(up_out.data()[2],  2.0f));  // row0, col2
+    assert(is_close_nn(up_out.data()[3],  2.0f));  // row0, col3
+    assert(is_close_nn(up_out.data()[4],  1.0f));  // row1, col0
+    assert(is_close_nn(up_out.data()[8],  3.0f));  // row2, col0
+    assert(is_close_nn(up_out.data()[15], 4.0f));  // row3, col3
+  }
+
   // test Checkpoint: gradient checkpointing must reproduce the plain block's
   // gradients exactly (same input-grads AND same weight-grads). The wrapped run
   // builds no graph in forward and recomputes the block in backward, so matching
