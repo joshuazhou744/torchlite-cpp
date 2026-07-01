@@ -404,6 +404,23 @@ void test_nn() {
     assert(is_close(up_out.data()[15], 4.0f));  // row3, col3
   }
 
+  // test Upsample2d with in_channels > 0: output shape correct, has parameters
+  {
+    tl::nn::Upsample2d up(2, 4); // scale=2, in_channels=4 -> conv applied after
+    tl::Tensor up_in = tl::randn({2, 4, 8, 8});
+    tl::Tensor up_out = up.forward(up_in);
+    // spatial dims doubled
+    assert(up_out.sizes()[0] == 2);
+    assert(up_out.sizes()[1] == 4);
+    assert(up_out.sizes()[2] == 16);
+    assert(up_out.sizes()[3] == 16);
+    // has conv parameters
+    auto params = up.parameters();
+    assert(!params.empty());
+    for (int i = 0; i < up_out.numel(); ++i)
+      assert(std::isfinite(up_out.data()[i]));
+  }
+
   // test Checkpoint: gradient checkpointing must reproduce the plain block's
   // gradients exactly (same input-grads AND same weight-grads). The wrapped run
   // builds no graph in forward and recomputes the block in backward, so matching
