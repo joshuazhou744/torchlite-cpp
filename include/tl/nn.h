@@ -300,11 +300,13 @@ private:
 // Upsample2d: nearest-neighbour spatial upsampling by integer scale factor
 class Upsample2d: public Module {
 public:
-  Upsample2d(int64_t scale_factor);
+  Upsample2d(int64_t scale_factor, int64_t in_channels = 0);
   Tensor forward(const Tensor& input) const override;
-  std::vector<Tensor*> parameters() override { return {}; }
+  std::vector<Tensor*> parameters() override;
 private:
   int64_t scale_factor_;
+  int64_t in_channels_;
+  Conv2d conv_; // when in_channels > 0
 };
 
 // BatchNorm2d: normalize per channel across (N, H, W)

@@ -568,7 +568,16 @@ Tensor PositionalEncoding::forward(const Tensor& input) const {
 }
 
 // Upsample 2D
-Upsample2d::Upsample2d(int64_t scale_factor) : scale_factor_(scale_factor) {}
+Upsample2d::Upsample2d(int64_t scale_factor, int64_t in_channels)
+  : scale_factor_(scale_factor),
+    in_channels_(in_channels),
+    conv_(std::max(in_channels, int64_t(1)), std::max(in_channels, int64_t(1)), 3, 1, 1)
+{}
+
+std::vector<Tensor*> Upsample2d::parameters() {
+  if (in_channels_ > 0) return conv_.parameters();
+  return {};
+}
 
 Tensor Upsample2d::forward(const Tensor& input) const {
   // input: [N, C, H, W]
@@ -596,6 +605,10 @@ Tensor Upsample2d::forward(const Tensor& input) const {
         }
       }
     }
+  }
+
+  if (in_channels_ > 0) {
+    return conv_.forward(out);
   }
   return out;
 }
