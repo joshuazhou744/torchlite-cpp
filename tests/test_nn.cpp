@@ -404,6 +404,30 @@ void test_nn() {
     assert(is_close(up_out.data()[15], 4.0f));  // row3, col3
   }
 
+  // test Downsample: halves H and W via strided conv
+  {
+    tl::nn::Downsample ds(4); // 4 channels
+
+    tl::Tensor x = tl::randn({2, 4, 16, 16});
+    tl::Tensor out = ds.forward(x);
+
+    // spatial dims halved
+    assert(out.sizes()[0] == 2);
+    assert(out.sizes()[1] == 4);
+    assert(out.sizes()[2] == 8);
+    assert(out.sizes()[3] == 8);
+
+    // channels unchanged
+    assert(out.sizes()[1] == x.sizes()[1]);
+
+    // has parameters (conv weight + bias)
+    auto params = ds.parameters();
+    assert(!params.empty());
+
+    for (int i = 0; i < out.numel(); ++i)
+      assert(std::isfinite(out.data()[i]));
+  }
+
   // test Upsample with in_channels > 0: output shape correct, has parameters
   {
     tl::nn::Upsample up(2, 4); // scale=2, in_channels=4 -> conv applied after
