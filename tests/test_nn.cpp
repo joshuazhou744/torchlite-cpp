@@ -564,5 +564,38 @@ void test_nn() {
     assert(any_diff);
   }
 
+  // test Embedding: 1D input [N] -> [N, embedding_dim]
+  {
+    tl::nn::Embedding emb(10, 4); // 10 tokens, embedding dim 4
+
+    tl::Tensor idx({3});
+    idx.data()[0] = 0.0f; idx.data()[1] = 5.0f; idx.data()[2] = 9.0f;
+
+    tl::Tensor out = emb.forward(idx);
+    assert(out.sizes().size() == 2);
+    assert(out.sizes()[0] == 3);
+    assert(out.sizes()[1] == 4);
+
+    // same index -> same embedding row
+    tl::Tensor idx2({2});
+    idx2.data()[0] = 5.0f; idx2.data()[1] = 5.0f;
+    tl::Tensor out2 = emb.forward(idx2);
+    for (int d = 0; d < 4; ++d)
+      assert(is_close(out2.data()[0 * 4 + d], out2.data()[1 * 4 + d]));
+
+    // 2D input [N, T] -> [N, T, embedding_dim]
+    tl::Tensor idx3({2, 3});
+    for (int i = 0; i < 6; ++i) idx3.data()[i] = (float)(i % 10);
+    tl::Tensor out3 = emb.forward(idx3);
+    assert(out3.sizes().size() == 3);
+    assert(out3.sizes()[0] == 2);
+    assert(out3.sizes()[1] == 3);
+    assert(out3.sizes()[2] == 4);
+
+    // one learned parameter (weight)
+    assert(emb.parameters().size() == 1);
+    assert(emb.parameters()[0]->numel() == 10 * 4);
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }

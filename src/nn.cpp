@@ -818,7 +818,7 @@ Embedding::Embedding(int64_t num_embeddings, int64_t embedding_dim)
 Tensor Embedding::forward(const Tensor& input) const {
   // input: [...] integer indices
   // ouput: [..., embedding_dim]
-  auto in_sizes = inputs.sizes();
+  auto in_sizes = input.sizes();
   int64_t num_indices = input.numel();
   int64_t embedding_dim = weight_.sizes()[1];
 
