@@ -567,6 +567,39 @@ Tensor PositionalEncoding::forward(const Tensor& input) const {
   return add(input, pe_slice); // broadcast add accross batch
 }
 
+// Upsample 2D
+Upsample2d::Upsample2d(int64_t scale_factor) : scale_factor_(scale_factor) {}
+
+Tensor Upsample2d::forward(const Tensor& input) const {
+  // input: [N, C, H, W]
+  int64_t N = input.sizes()[0];
+  int64_t C = input.sizes()[1];
+  int64_t H = input.sizes()[2];
+  int64_t W = input.sizes()[3];
+  int64_t H_out = H * scale_factor_;
+  int64_t W_out = W * scale_factor_;
+
+  Tensor out({N, C, H_out, W_out});
+  const float* src = input.data();
+  float* dst = out.data();
+
+  for (int64_t n = 0; n < N; ++n) {
+    for (int64_t c = 0; c < C; ++c) {
+      for (int64_t h = 0; h < H; ++h) {
+        for (int64_t w = 0; w < W; ++w) {
+          float val = src[n*C*H*W + c*H*W + h*W + w];
+          for (int64_t dh = 0; dh < scale_factor_; ++dh) {
+            for (int64_t dw = 0; dw < scale_factor_; ++dw) {
+              dst[n*C*H_out*W_out + c*H_out*W_out + (h*scale_factor_+dh)*W_out + (w*scale_factor_+dw)] = val;
+            }
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
 // Batch norm 2D
 BatchNorm2d::BatchNorm2d(int64_t num_channels, float eps, float momentum)
   : gamma_(ones({num_channels})),

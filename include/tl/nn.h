@@ -297,6 +297,16 @@ private:
   int64_t kernel_size_, stride_, padding_;
 };
 
+// Upsample2d: nearest-neighbour spatial upsampling by integer scale factor
+class Upsample2d: public Module {
+public:
+  Upsample2d(int64_t scale_factor);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return {}; }
+private:
+  int64_t scale_factor_;
+};
+
 // BatchNorm2d: normalize per channel across (N, H, W)
 class BatchNorm2d: public Module {
 public:
