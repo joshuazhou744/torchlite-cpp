@@ -810,6 +810,35 @@ Tensor TimestepEmbedding::forward(const Tensor& sigma) const {
   return fc2_.forward(x);
 }
 
+// Embedding LUT
+Embedding::Embedding(int64_t num_embeddings, int64_t embedding_dim)
+  : weight_(randn({num_embeddings, embedding_dim}))
+{}
+
+Tensor Embedding::forward(const Tensor& input) const {
+  // input: [...] integer indices
+  // ouput: [..., embedding_dim]
+  auto in_sizes = inputs.sizes();
+  int64_t num_indices = input.numel();
+  int64_t embedding_dim = weight_.sizes()[1];
+
+  std::vector<int64_t> out_sizes(in_sizes.begin(), in_sizes.end());
+  out_sizes.push_back(embedding_dim);
+
+  Tensor out(out_sizes);
+  const float* ip = input.data();
+  const float* wp = weight_.data();
+  float* op = out.data();
+
+  for (int64_t i = 0; i < num_indices; ++i) {
+    int64_t index = static_cast<int64_t>(ip[i]);
+    for (int64_t d = 0; d < embedding_dim; ++d) {
+      op[i * embedding_dim + d] = wp[index * embedding_dim + d];
+    }
+  }
+  return out;
+}
+
 // Fourier features
 FourierFeatures::FourierFeatures(int64_t cond_dim)
   : weight_(randn({1, cond_dim / 2}))

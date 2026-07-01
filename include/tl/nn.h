@@ -380,6 +380,17 @@ private:
   mutable Tensor std_; // [1]
 };
 
+// Embedding: learnable lookup table mapping integer indices to dense vectors
+// weight: [num_embeddings, embedding_dim]
+class Embedding: public Module {
+public:
+  Embedding(int64_t num_embeddings, int64_t embedding_dim);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override { return {&weight_}; }
+private:
+  Tensor weight_; // lookup table [num_embeddings, embedding_dim]
+};
+
 // TimestepEmbedding: maps scalar noise level sigma to conditioning vector
 // log(sigma) -> sinusoidal encoding -> Linear -> SiLU -> Linear
 class TimestepEmbedding: public Module {
