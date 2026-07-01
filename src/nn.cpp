@@ -740,7 +740,7 @@ Tensor AdaptiveGroupNorm::forward(const Tensor& input, const Tensor& cond) const
   gamma = reshape(gamma, shape);
   beta = reshape(beta, shape);
 
-  return add(mul(normed, gamma), beta);
+  return add(mul(normed, add(gamma, ones(gamma.sizes()))), beta);
 }
 
 Tensor AdaptiveGroupNorm::forward(const Tensor& input) const {

@@ -4,12 +4,7 @@
 #include <tl/nn.h>
 #include <tl/factory.h>
 #include <cassert>
-#include <cmath>
-
-// helper function for float comparison
-bool is_close(float a, float b, float e = 1e-5) {
-  return std::abs( a - b ) < e;
-}
+#include "test_utils.h"
 
 void test_ops() {
   // test element wise addition

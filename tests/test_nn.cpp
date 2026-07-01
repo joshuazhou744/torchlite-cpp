@@ -8,10 +8,6 @@
 #include <vector>
 #include "test_utils.h" // CHECK(): NDEBUG-proof, unlike assert()
 
-// helper function for float comparison
-bool is_close_nn(float a, float b, float e = 1e-5) {
-  return std::abs( a - b ) < e;
-}
 
 void test_nn() {
   // test Linear: shape check
@@ -51,8 +47,8 @@ void test_nn() {
   // each row should have mean ~0 after normalization
   float row0_mean = (ln_out.data()[0] + ln_out.data()[1] + ln_out.data()[2] + ln_out.data()[3]) / 4.0f;
   float row1_mean = (ln_out.data()[4] + ln_out.data()[5] + ln_out.data()[6] + ln_out.data()[7]) / 4.0f;
-  assert(is_close_nn(row0_mean, 0.0f, 1e-4));
-  assert(is_close_nn(row1_mean, 0.0f, 1e-4));
+  assert(is_close(row0_mean, 0.0f, 1e-4));
+  assert(is_close(row1_mean, 0.0f, 1e-4));
 
   // each row should have variance ~1 after normalization
   float row0_var = 0.0f;
@@ -60,7 +56,7 @@ void test_nn() {
     row0_var += (ln_out.data()[i] - row0_mean) * (ln_out.data()[i] - row0_mean);
   }
   row0_var /= 4.0f;
-  assert(is_close_nn(row0_var, 1.0f, 1e-4));
+  assert(is_close(row0_var, 1.0f, 1e-4));
 
   // test BatchNorm2d: each channel output should have mean ~0 and variance ~1
   // input (N=2, C=3, H=2, W=2): fill each channel with a distinct scale to ensure
@@ -104,12 +100,12 @@ void test_nn() {
       }
     }
     ch_mean /= 8.0f;
-    assert(is_close_nn(ch_mean, 0.0f, 1e-4));
+    assert(is_close(ch_mean, 0.0f, 1e-4));
 
     float ch_var = 0.0f;
     for (int i = 0; i < 8; ++i) ch_var += (ch_vals[i] - ch_mean) * (ch_vals[i] - ch_mean);
     ch_var /= 8.0f;
-    assert(is_close_nn(ch_var, 1.0f, 1e-3)); // small slack for the eps term inside BN
+    assert(is_close(ch_var, 1.0f, 1e-3)); // small slack for the eps term inside BN
   }
 
   // parameter count: gamma and beta, each shape [C]
@@ -151,7 +147,7 @@ void test_nn() {
             for (int64_t w = 0; w < 2; ++w)
               group_mean += gn_out.data()[n*16 + c*4 + h*2 + w];
         group_mean /= 8.0f; // 2 channels * 2H * 2W
-        assert(is_close_nn(group_mean, 0.0f, 1e-4));
+        assert(is_close(group_mean, 0.0f, 1e-4));
       }
     }
 
@@ -187,7 +183,7 @@ void test_nn() {
     // different cond -> different output (conditioning actually changes output)
     bool any_diff = false;
     for (int i = 0; i < out1.numel(); ++i) {
-      if (!is_close_nn(out1.data()[i], out2.data()[i])) { any_diff = true; break; }
+      if (!is_close(out1.data()[i], out2.data()[i])) { any_diff = true; break; }
     }
     assert(any_diff);
 
@@ -328,7 +324,7 @@ void test_nn() {
   // test output differs from input (encoding was added)
   bool any_diff = false;
   for (int i = 0; i < pe_in.numel(); ++i) {
-    if (!is_close_nn(pe_in.data()[i], pe_out.data()[i])) {
+    if (!is_close(pe_in.data()[i], pe_out.data()[i])) {
       any_diff = true;
       break;
     }
@@ -344,7 +340,7 @@ void test_nn() {
   // pe_out2 - pe_in2 should equal pe_out3 - zeros = pe_out3
   for (int i = 0; i < pe_out3.numel(); ++i) {
     float added_to_in2 = pe_out2.data()[i] - pe_in2.data()[i];
-    assert(is_close_nn(added_to_in2, pe_out3.data()[i]));
+    assert(is_close(added_to_in2, pe_out3.data()[i]));
   }
 
   // test MaxPool2d: kernel=2, stride=2 over (1,1,4,4) input filled 1..16
@@ -358,10 +354,10 @@ void test_nn() {
   assert(maxpool_out.sizes()[2] == 2);
   assert(maxpool_out.sizes()[3] == 2);
   // each 2x2 window's max: top-left=6, top-right=8, bottom-left=14, bottom-right=16
-  assert(is_close_nn(maxpool_out.data()[0], 6.0f));
-  assert(is_close_nn(maxpool_out.data()[1], 8.0f));
-  assert(is_close_nn(maxpool_out.data()[2], 14.0f));
-  assert(is_close_nn(maxpool_out.data()[3], 16.0f));
+  assert(is_close(maxpool_out.data()[0], 6.0f));
+  assert(is_close(maxpool_out.data()[1], 8.0f));
+  assert(is_close(maxpool_out.data()[2], 14.0f));
+  assert(is_close(maxpool_out.data()[3], 16.0f));
 
   // test AvgPool2d: same input and config
   tl::nn::AvgPool2d avgpool(2, 2);
@@ -372,18 +368,18 @@ void test_nn() {
   assert(avgpool_out.sizes()[2] == 2);
   assert(avgpool_out.sizes()[3] == 2);
   // each 2x2 window's average
-  assert(is_close_nn(avgpool_out.data()[0], 3.5f));
-  assert(is_close_nn(avgpool_out.data()[1], 5.5f));
-  assert(is_close_nn(avgpool_out.data()[2], 11.5f));
-  assert(is_close_nn(avgpool_out.data()[3], 13.5f));
+  assert(is_close(avgpool_out.data()[0], 3.5f));
+  assert(is_close(avgpool_out.data()[1], 5.5f));
+  assert(is_close(avgpool_out.data()[2], 11.5f));
+  assert(is_close(avgpool_out.data()[3], 13.5f));
 
   // test default stride (stride == kernel_size when omitted)
   tl::nn::MaxPool2d maxpool_def(2);
   tl::Tensor maxpool_def_out = maxpool_def.forward(pool_in);
   assert(maxpool_def_out.sizes()[2] == 2);
   assert(maxpool_def_out.sizes()[3] == 2);
-  assert(is_close_nn(maxpool_def_out.data()[0], 6.0f));
-  assert(is_close_nn(maxpool_def_out.data()[3], 16.0f));
+  assert(is_close(maxpool_def_out.data()[0], 6.0f));
+  assert(is_close(maxpool_def_out.data()[3], 16.0f));
 
   // test Upsample2d: scale_factor=2 on (1,1,2,2) input [[1,2],[3,4]]
   // each pixel repeated 2x in H and W -> (1,1,4,4)
@@ -399,13 +395,13 @@ void test_nn() {
     assert(up_out.sizes()[2] == 4);
     assert(up_out.sizes()[3] == 4);
     // top-left 2x2 block all == 1, top-right 2x2 block all == 2
-    assert(is_close_nn(up_out.data()[0],  1.0f));  // row0, col0
-    assert(is_close_nn(up_out.data()[1],  1.0f));  // row0, col1
-    assert(is_close_nn(up_out.data()[2],  2.0f));  // row0, col2
-    assert(is_close_nn(up_out.data()[3],  2.0f));  // row0, col3
-    assert(is_close_nn(up_out.data()[4],  1.0f));  // row1, col0
-    assert(is_close_nn(up_out.data()[8],  3.0f));  // row2, col0
-    assert(is_close_nn(up_out.data()[15], 4.0f));  // row3, col3
+    assert(is_close(up_out.data()[0],  1.0f));  // row0, col0
+    assert(is_close(up_out.data()[1],  1.0f));  // row0, col1
+    assert(is_close(up_out.data()[2],  2.0f));  // row0, col2
+    assert(is_close(up_out.data()[3],  2.0f));  // row0, col3
+    assert(is_close(up_out.data()[4],  1.0f));  // row1, col0
+    assert(is_close(up_out.data()[8],  3.0f));  // row2, col0
+    assert(is_close(up_out.data()[15], 4.0f));  // row3, col3
   }
 
   // test Checkpoint: gradient checkpointing must reproduce the plain block's
@@ -449,18 +445,18 @@ void test_nn() {
     // forward outputs must match (silent forward == normal forward)
     assert(ckpt_y2.numel() == ckpt_y1.numel());
     for (int64_t i = 0; i < ckpt_y1.numel(); ++i)
-      assert(is_close_nn(ckpt_y2.data()[i], ckpt_y1.data()[i]));
+      assert(is_close(ckpt_y2.data()[i], ckpt_y1.data()[i]));
 
     // input-grads must match
     assert(ckpt_x2.grad().numel() == (int64_t)plain_xgrad.size());
     for (int64_t i = 0; i < ckpt_x2.grad().numel(); ++i)
-      assert(is_close_nn(ckpt_x2.grad().data()[i], plain_xgrad[i]));
+      assert(is_close(ckpt_x2.grad().data()[i], plain_xgrad[i]));
 
     // weight-grads must match (recompute produced the block's param grads)
     for (size_t k = 0; k < ckpt_params.size(); ++k) {
       assert(ckpt_params[k]->grad().numel() == (int64_t)plain_pgrad[k].size());
       for (int64_t i = 0; i < ckpt_params[k]->grad().numel(); ++i)
-        assert(is_close_nn(ckpt_params[k]->grad().data()[i], plain_pgrad[k][i]));
+        assert(is_close(ckpt_params[k]->grad().data()[i], plain_pgrad[k][i]));
     }
   }
 
@@ -484,15 +480,15 @@ void test_nn() {
 
     tl::Tensor id_y = id_ckpt.forward(id_x);
     // identity weight: output equals input
-    CHECK(is_close_nn(id_y.data()[0], 1.0f));
-    CHECK(is_close_nn(id_y.data()[1], 2.0f));
-    CHECK(is_close_nn(id_y.data()[2], 3.0f));
+    CHECK(is_close(id_y.data()[0], 1.0f));
+    CHECK(is_close(id_y.data()[1], 2.0f));
+    CHECK(is_close(id_y.data()[2], 3.0f));
 
     id_y.backward(); // dY = ones -> dX = ones @ I = ones
     // exact analytic input grad is 1.0; the double-count bug yields 2.0
     CHECK(id_x.grad().numel() == 3);
     for (int64_t i = 0; i < id_x.grad().numel(); ++i)
-      CHECK(is_close_nn(id_x.grad().data()[i], 1.0f));
+      CHECK(is_close(id_x.grad().data()[i], 1.0f));
   }
 
   // test TimestepEmbedding: output shape and finiteness
@@ -520,7 +516,7 @@ void test_nn() {
     // different sigma -> different embedding (not all identical)
     bool any_diff = false;
     for (int64_t i = 0; i < 128; ++i) {
-      if (!is_close_nn(te_out.data()[0 * 128 + i], te_out.data()[1 * 128 + i])) {
+      if (!is_close(te_out.data()[0 * 128 + i], te_out.data()[1 * 128 + i])) {
         any_diff = true;
         break;
       }
