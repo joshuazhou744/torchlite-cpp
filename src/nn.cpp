@@ -631,6 +631,53 @@ std::vector<Tensor*> BatchNorm2d::parameters() {
   return {&gamma_, &beta_};
 }
 
+// Group normalization
+GroupNorm::GroupNorm(int64_t num_groups, int64_t num_channels, float eps)
+  : gamma_(ones({num_channels})),
+    beta_(zeros({num_channels})),
+    num_groups_(num_groups),
+    num_channels_(num_channels),
+    eps_(eps)
+{
+  if (num_channels % num_groups != 0) {
+    throw std::invalid_argument("GroupNorm: num_channels must be divisible by num_groups");
+  }
+  gamma_.set_requires_grad(true);
+  beta_.set_requires_grad(true);
+}
+
+std::vector<Tensor*> GroupNorm::parameters() {
+  return {&gamma_, &beta_};
+}
+
+Tensor GroupNorm::forward(const Tensor& input) const {
+  // input: [N, C, *] (any spatial dims after channel dim, C)
+  int64_t N = input.sizes()[0];
+  int64_t C = input.sizes()[1];
+  int64_t spatial = input.numel() / (N * C);
+  int64_t group_size = (C / num_groups_) * spatial;
+
+  Tensor x = reshape(input, {N, num_groups_, group_size});
+
+  // mean and variance per (N, group)
+  Tensor m = mean(x, 2, true); // [N, num_groups, 1]
+  Tensor diff = sub(x, m);
+  Tensor v = mean(mul(diff, diff), 2, true); // [N, num_groups, 1]
+  Tensor denom = sqrt(add(v, full(v.sizes(), eps_)));
+
+  Tensor normed = div(diff, denom);
+  normed = reshape(normed, input.sizes()); // back to [N, C, *]
+
+  // broadcast gamma and beta over N and spatial dims
+  // reshape to [1, C, 1] for broadcasting
+  std::vector<int64_t> param_shape(input.sizes().size(), 1);
+  param_shape[1] = C;
+  Tensor g = reshape(gamma_, param_shape);
+  Tensor b = reshape(beta_, param_shape);
+
+  return add(mul(normed, g), b);
+}
+
 // Input normalization
 InputNormalize::InputNormalize()
   : mean_(zeros({1})),

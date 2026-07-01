@@ -325,6 +325,25 @@ private:
   bool training_ = true;
 };
 
+// GroupNorm: normalize over groups of channels, input [N, C, *]
+class GroupNorm: public Module {
+public:
+  GroupNorm(int64_t num_groups, int64_t num_channels, float eps = 1e-5);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_gamma(const Tensor& g) { gamma_ = g; }
+  void set_beta(const Tensor& b) { beta_ = b; }
+  const Tensor& gamma() const { return gamma_; }
+  const Tensor& beta() const { return beta_; }
+
+private:
+  Tensor gamma_; // learnable scale
+  Tensor beta_; // learnable shift
+  int64_t num_groups_;
+  int64_t num_channels_;
+  float eps_;
+};
+
 // InputNormalize: scalar (x - mean) / std_deviation applied to input
 // stats (mean and std_deviation) stored as buffers
 class InputNormalize: public Module {
