@@ -461,5 +461,42 @@ void test_nn() {
       CHECK(is_close_nn(id_x.grad().data()[i], 1.0f));
   }
 
+  // test TimestepEmbedding: output shape and finiteness
+  // dim=64 sinusoidal features, out_dim=128 conditioning vector
+  {
+    tl::nn::TimestepEmbedding te(64, 128);
+
+    // batch of 3 noise levels
+    tl::Tensor sigma({3});
+    sigma.data()[0] = 0.1f;
+    sigma.data()[1] = 1.0f;
+    sigma.data()[2] = 10.0f;
+
+    tl::Tensor te_out = te.forward(sigma);
+
+    // output shape: [N, out_dim]
+    assert(te_out.sizes().size() == 2);
+    assert(te_out.sizes()[0] == 3);
+    assert(te_out.sizes()[1] == 128);
+
+    // all values finite
+    for (int i = 0; i < te_out.numel(); ++i)
+      assert(std::isfinite(te_out.data()[i]));
+
+    // different sigma -> different embedding (not all identical)
+    bool any_diff = false;
+    for (int64_t i = 0; i < 128; ++i) {
+      if (!is_close_nn(te_out.data()[0 * 128 + i], te_out.data()[1 * 128 + i])) {
+        any_diff = true;
+        break;
+      }
+    }
+    assert(any_diff);
+
+    // parameter count: fc1 + fc2, each has weight + bias
+    auto te_params = te.parameters();
+    assert(te_params.size() == 4); // fc1 weight, fc1 bias, fc2 weight, fc2 bias
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }
