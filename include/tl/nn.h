@@ -266,6 +266,12 @@ public:
   std::vector<Tensor*> parameters() override { return {}; }
 };
 
+class SiLU: public Module {
+public:
+  Tensor forward(const Tensor& input) const override { return silu(input); }
+  std::vector<Tensor*> parameters() override { return {}; }
+};
+
 class Flatten: public Module {
 public:
   Tensor forward(const Tensor& input) const override {
