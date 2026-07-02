@@ -352,7 +352,7 @@ Tensor SelfAttention2d::forward(const Tensor& input) const {
   attn = reshape(attn, {N, C, H, W});
 
   // output projection then residual
-  return add(input, out_proj_.forward(attn));
+  return add(x, out_proj_.forward(attn));
 }
 
 // Transformer encoder layer
