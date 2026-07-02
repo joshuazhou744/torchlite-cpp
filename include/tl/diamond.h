@@ -5,7 +5,7 @@
 #include <vector>
 
 namespace tl {
-namespace models {
+namespace diamond {
 
 // ResidualBlock: Conv1x1 -> AdaGN -> SiLU -> Conv -> AdaGN -> SiLU + skip connection
 // cond_dim: size of conditioning vector (timestep and action embedding concatenated)
@@ -37,5 +37,5 @@ private:
   std::vector<ResidualBlock> blocks_;
 };
 
-} // models
+} // diamond
 } // tl

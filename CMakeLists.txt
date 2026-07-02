@@ -16,7 +16,7 @@ add_library(torchlite
     src/optim.cpp
     src/model_io.cpp
     src/audio.cpp
-    src/models.cpp
+    src/diamond.cpp
 )
 
 # Eigen library link
@@ -70,7 +70,7 @@ if(BUILD_TESTS)
     tests/test_loss.cpp
     tests/test_optim.cpp
     tests/test_model_io.cpp
-    tests/test_models.cpp
+    tests/test_diamond.cpp
   )
   target_link_libraries(run_tests PRIVATE torchlite)
   target_compile_options(run_tests PRIVATE -UNDEBUG)

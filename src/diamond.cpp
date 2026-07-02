@@ -1,4 +1,4 @@
-#include <tl/models.h>
+#include <tl/diamond.h>
 #include <tl/activation.h>
 #include <tl/ops.h>
 #include <tl/factory.h>
@@ -7,7 +7,7 @@
 #include <stdexcept>
 
 namespace tl {
-namespace models {
+namespace diamond {
 
 static constexpr int64_t GN_GROUP_SIZE = 32;
 static constexpr int64_t ATTN_HEAD_DIM = 8;
@@ -80,6 +80,5 @@ std::pair<Tensor, std::vector<Tensor>> ResidualBlocks::forward(const Tensor& x, 
   return {h, outputs};
 }
 
-
-}
-}
+} // diamond
+} // tl

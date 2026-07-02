@@ -1,12 +1,12 @@
 #include <iostream>
 #include <cassert>
-#include <tl/models.h>
+#include <tl/diamond.h>
 #include <tl/factory.h>
 #include "test_utils.h"
 
-void test_models() {
+void test_diamond() {
   {
-    tl::models::ResidualBlock rb(4, 4, 8, false); // in=out=4, cond_dim=8, no attn
+    tl::diamond::ResidualBlock rb(4, 4, 8, false);
 
     tl::Tensor x    = tl::randn({2, 4, 8, 8});
     tl::Tensor cond = tl::randn({2, 8});
@@ -24,7 +24,7 @@ void test_models() {
   }
 
   {
-    tl::models::ResidualBlock rb(4, 8, 16, false); // in=4, out=8, cond_dim=16
+    tl::diamond::ResidualBlock rb(4, 8, 16, false);
 
     tl::Tensor x    = tl::randn({2, 4, 8, 8});
     tl::Tensor cond = tl::randn({2, 16});
@@ -39,10 +39,9 @@ void test_models() {
       assert(std::isfinite(out.data()[i]));
   }
 
-
   {
-    tl::models::ResidualBlock rb_same(4, 4, 8, false); // no proj
-    tl::models::ResidualBlock rb_diff(4, 8, 8, false); // with proj
+    tl::diamond::ResidualBlock rb_same(4, 4, 8, false);
+    tl::diamond::ResidualBlock rb_diff(4, 8, 8, false);
 
     auto p_same = rb_same.parameters();
     auto p_diff = rb_diff.parameters();
@@ -52,7 +51,7 @@ void test_models() {
   }
 
   {
-    tl::models::ResidualBlock rb(8, 8, 16, true); // attn=true, need C divisible by head_dim=8
+    tl::diamond::ResidualBlock rb(8, 8, 16, true);
 
     tl::Tensor x    = tl::randn({2, 8, 4, 4});
     tl::Tensor cond = tl::randn({2, 16});
@@ -66,7 +65,7 @@ void test_models() {
 
   // ResidualBlocks: encoder mode (no skip connections)
   {
-    tl::models::ResidualBlocks rbs({4, 4}, {4, 8}, 8, false);
+    tl::diamond::ResidualBlocks rbs({4, 4}, {4, 8}, 8, false);
 
     tl::Tensor x    = tl::randn({2, 4, 8, 8});
     tl::Tensor cond = tl::randn({2, 8});
@@ -87,12 +86,10 @@ void test_models() {
     tl::Tensor x    = tl::randn({2, 4, 8, 8});
     tl::Tensor cond = tl::randn({2, 8});
 
-    // encoder skip outputs: each [N, 4, H, W]
     tl::Tensor skip0 = tl::randn({2, 4, 8, 8});
     tl::Tensor skip1 = tl::randn({2, 4, 8, 8});
 
-    // decoder blocks expect in_channels = 4+4=8 after cat
-    tl::models::ResidualBlocks rbs({8, 8}, {4, 4}, 8, false);
+    tl::diamond::ResidualBlocks rbs({8, 8}, {4, 4}, 8, false);
 
     auto [out, outputs] = rbs.forward(x, cond, {skip0, skip1});
 
@@ -102,5 +99,5 @@ void test_models() {
       assert(std::isfinite(out.data()[i]));
   }
 
-  std::cout << "models tests passed" << std::endl;
+  std::cout << "diamond tests passed" << std::endl;
 }
