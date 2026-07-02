@@ -42,7 +42,7 @@ private:
 // encoder downsamples, decoder upsamples with residuals from encoder outputs
 class UNet {
 public:
-  UNet(int64_t cond_channels, std::vector<int64_t> depths, std::vector<int64_t> channels, std::vector<int64_t> attn_depths, int64_t gn_group_size = 32, int64_t attn_head_dim = 8);
+  UNet(int64_t cond_dim, std::vector<int64_t> depths, std::vector<int64_t> channels, std::vector<int64_t> attn_depths, int64_t gn_group_size = 32, int64_t attn_head_dim = 8);
   Tensor forward(const Tensor& x, const Tensor& cond) const;
   std::vector<Tensor*> parameters();
 private:
