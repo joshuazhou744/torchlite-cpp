@@ -144,6 +144,43 @@ std::vector<Tensor*> UNet::parameters() {
 }
 
 
+Tensor UNet::forward(const Tensor& x, const Tensor& cond) const {
+  int64_t H = x.sizes()[2];
+  int64_t W = x.sizes()[3];
+
+  // pad so H, W divisible by 2^num_down
+  int64_t factor = int64_t(1) << num_down_; // left shift 1 num_down_ bits, get 2^num_down
+  int64_t pad_h = ((H + factor - 1) / factor) * factor - H; // same as ceil(H/factor) * factor - H
+  int64_t pad_w = ((W + factor - 1) / factor) * factor - W;
+  Tensor h = pad(pad(x, 3, W + pad_w), 2, H + pad_h);
+
+  // encoder
+  std::vector<std::vector<Tensor>> d_outputs;
+  for (int64_t i = 0; i < (int64_t)d_blocks_.size(); ++i) {
+    Tensor x_down = (i == 0) ? h : downsamples_[i-1].forward(h);
+    auto [out, block_outputs] = d_blocks_[i].forward(x_down, cond);
+    h = out;
+    // build level skips: [x_down, out0, out1]
+    std::vector<Tensor> level_skips;
+    level_skips.push_back(x_down);
+    for (auto& t: block_outputs) level_skips.push_back(t);
+    d_outputs.push_back(std::move(level_skips));
+  }
+
+  // bottleneck
+  h = mid_blocks_.forward(h, cond).first;
+
+  // decoder
+  for (int64_t i = 0; i < (int64_t)u_blocks_.size(); ++i) {
+    auto& skip = d_outputs[d_outputs.size() - 1 - i]; // get residual from encoder outputs (reversed)
+    Tensor x_up = (i == 0) ? h : upsamples_[i - 1].forward(h);
+    std::vector<Tensor> rev_skip(skip.rbegin(), skip.rend()); // skip[::-1]
+    h = u_blocks_[i].forward(x_up, cond, rev_skip).first;
+  }
+
+  // crop padding
+  return slice(slice(h, 2, 0, H), 3, 0, W);
+}
 
 } // diamond
 } // tl

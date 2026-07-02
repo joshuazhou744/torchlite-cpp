@@ -447,5 +447,11 @@ private:
   Tensor weight_; // random frequencies for random resolution
 };
 
+class Identity: public Module {
+public:
+  Tensor forward(const Tensor& input) const override { return input; }
+  std::vector<Tensor*> parameters() override { return {}; }
+};
+
 } // nn
 } // tl
