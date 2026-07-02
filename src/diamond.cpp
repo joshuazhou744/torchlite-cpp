@@ -9,17 +9,14 @@
 namespace tl {
 namespace diamond {
 
-static constexpr int64_t GN_GROUP_SIZE = 32;
-static constexpr int64_t ATTN_HEAD_DIM = 8;
-
 // Residual block with adaptive group norm
-ResidualBlock::ResidualBlock(int64_t in_channels, int64_t out_channels, int64_t cond_dim, bool attn)
+ResidualBlock::ResidualBlock(int64_t in_channels, int64_t out_channels, int64_t cond_dim, bool attn, int64_t gn_group_size, int64_t attn_head_dim)
   : proj_(in_channels, out_channels, 1, 1, 0),
-    agn1_(std::max(int64_t(1), in_channels / GN_GROUP_SIZE), in_channels, cond_dim),
+    agn1_(std::max(int64_t(1), in_channels / gn_group_size), in_channels, cond_dim),
     conv1_(in_channels, out_channels, 3, 1, 1),
-    agn2_(std::max(int64_t(1), out_channels / GN_GROUP_SIZE), out_channels, cond_dim),
+    agn2_(std::max(int64_t(1), out_channels / gn_group_size), out_channels, cond_dim),
     conv2_(out_channels, out_channels, 3, 1, 1),
-    attn_(out_channels, std::max(int64_t(1), out_channels / ATTN_HEAD_DIM)),
+    attn_(out_channels, std::max(int64_t(1), out_channels / attn_head_dim)),
     should_proj_(in_channels != out_channels),
     has_attn_(attn)
 {
@@ -79,6 +76,8 @@ std::pair<Tensor, std::vector<Tensor>> ResidualBlocks::forward(const Tensor& x, 
   }
   return {h, outputs};
 }
+
+UNet::UNet()
 
 } // diamond
 } // tl
