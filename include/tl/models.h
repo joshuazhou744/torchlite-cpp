@@ -26,5 +26,16 @@ private:
   bool has_attn_;
 };
 
+// ResidualBlocks: sequence of ResidualBlock with optional skip connection concatenation
+class ResidualBlocks {
+public:
+  ResidualBlocks(std::vector<int64_t> in_channels, std::vector<int64_t> out_channels, int64_t cond_dim, bool attn);
+  std::pair<Tensor, std::vector<Tensor>> forward(const Tensor& x, const Tensor& cond, const std::vector<Tensor>& to_cat = {}) const;
+  std::vector<Tensor*> parameters();
+
+private:
+  std::vector<ResidualBlock> blocks_;
+};
+
 } // models
 } // tl

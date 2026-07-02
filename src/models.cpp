@@ -4,6 +4,7 @@
 #include <tl/factory.h>
 
 #include <cstdint>
+#include <stdexcept>
 
 namespace tl {
 namespace models {
@@ -48,6 +49,35 @@ Tensor ResidualBlock::forward(const Tensor& x, const Tensor& cond) const {
   h = add(h, r);
   if (has_attn_) h = attn_.forward(h);
   return h;
+}
+
+ResidualBlocks::ResidualBlocks(std::vector<int64_t> in_channels, std::vector<int64_t> out_channels, int64_t cond_dim, bool attn) {
+  if (in_channels.size() != out_channels.size()) {
+    throw std::invalid_argument("ResidualBlocks: in_channels must have same length as out_channels");
+  }
+  for (int64_t i = 0; i < (int64_t)in_channels.size(); ++i) {
+    blocks_.emplace_back(in_channels[i], out_channels[i], cond_dim, attn);
+  }
+}
+
+std::vector<Tensor*> ResidualBlocks::parameters() {
+  std::vector<Tensor*> params;
+  for (auto& b: blocks_) {
+    auto p = b.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  }
+  return params;
+}
+
+std::pair<Tensor, std::vector<Tensor>> ResidualBlocks::forward(const Tensor& x, const Tensor& cond, const std::vector<Tensor>& to_cat) const {
+  Tensor h = x;
+  std::vector<Tensor> outputs;
+  for (int64_t i = 0; i < (int64_t)blocks_.size(); ++i) {
+    h = (i < (int64_t)to_cat.size() && !to_cat[i].empty()) ? cat({h, to_cat[i]}, 1) : h;
+    h = blocks_[i].forward(h, cond);
+    outputs.push_back(h);
+  }
+  return {h, outputs};
 }
 
 

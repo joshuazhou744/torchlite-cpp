@@ -64,5 +64,43 @@ void test_models() {
       assert(std::isfinite(out.data()[i]));
   }
 
+  // ResidualBlocks: encoder mode (no skip connections)
+  {
+    tl::models::ResidualBlocks rbs({4, 4}, {4, 8}, 8, false);
+
+    tl::Tensor x    = tl::randn({2, 4, 8, 8});
+    tl::Tensor cond = tl::randn({2, 8});
+
+    auto [out, outputs] = rbs.forward(x, cond);
+
+    assert(out.sizes()[1] == 8);
+    assert(out.sizes()[2] == 8);
+    assert((int64_t)outputs.size() == 2);
+    assert(outputs[0].sizes()[1] == 4);
+    assert(outputs[1].sizes()[1] == 8);
+    for (int i = 0; i < out.numel(); ++i)
+      assert(std::isfinite(out.data()[i]));
+  }
+
+  // ResidualBlocks: decoder mode (with skip connections)
+  {
+    tl::Tensor x    = tl::randn({2, 4, 8, 8});
+    tl::Tensor cond = tl::randn({2, 8});
+
+    // encoder skip outputs: each [N, 4, H, W]
+    tl::Tensor skip0 = tl::randn({2, 4, 8, 8});
+    tl::Tensor skip1 = tl::randn({2, 4, 8, 8});
+
+    // decoder blocks expect in_channels = 4+4=8 after cat
+    tl::models::ResidualBlocks rbs({8, 8}, {4, 4}, 8, false);
+
+    auto [out, outputs] = rbs.forward(x, cond, {skip0, skip1});
+
+    assert(out.sizes()[1] == 4);
+    assert((int64_t)outputs.size() == 2);
+    for (int i = 0; i < out.numel(); ++i)
+      assert(std::isfinite(out.data()[i]));
+  }
+
   std::cout << "models tests passed" << std::endl;
 }
