@@ -138,6 +138,18 @@ private:
   Linear out_proj_; // output projection
 };
 
+// SelfAttention2d: spatial self-attention for [N, C, H, W] feature maps
+// reshapes to [N, H*W, C] for MHA, then reshapes back (MHA wrapper)
+class SelfAttention2d {
+public:
+  SelfAttention2d(int64_t in_channels, int64_t num_heads);
+  Tensor forward(const Tensor& input) const;
+  std::vector<Tensor*> parameters();
+private:
+  GroupNorm norm_;
+  MultiHeadAttention mha_;
+};
+
 // TransformerEncoderLayer: MSA and FFN with residual connections and layer normalization
 class TransformerEncoderLayer: public Module {
 public:

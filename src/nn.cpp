@@ -294,6 +294,43 @@ Tensor MultiHeadAttention::forward(const Tensor& query, const Tensor& context, c
   return out_proj_.forward(out);
 }
 
+// SelfAttention2d: wrapper around MultiHeadAttention
+SelfAttention2d::SelfAttention2d(int64_t in_channels, int64_t num_heads)
+  : norm_(std::max(int64_t(1), in_channels / 32), in_channels),
+    mha_(in_channels, num_heads)
+{}
+
+std::vector<Tensor*> SelfAttention2d::parameters() {
+  auto p = norm_.parameters();
+  auto m = mha_.parameters();
+  p.insert(p.end(), m.begin(), m.end());
+  return p;
+}
+
+Tensor SelfAttention2d::forward(const Tensor& input) const {
+  int64_t N = input.sizes()[0];
+  int64_t C = input.sizes()[1];
+  int64_t H = input.sizes()[2];
+  int64_t W = input.sizes()[3];
+
+  // normalize over channels first
+  Tensor x = norm_.forward(input);
+
+  // [N, C, H, W] -> [N, H*W, C]
+  x = reshape(x, {N, C, H*W});
+  x = transpose(x, 1, 2);
+
+  // self-attention over spacial tokens
+  x = mha_.forward(x);
+
+  // [N, H*W, C] -> [N, C, H, W]
+  x = transpose(x, 1, 2);
+  x = reshape(x, {N, C, H, W});
+
+  // residual (skip) connection
+  return add(input, x);
+}
+
 // Transformer encoder layer
 TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
   : msa_(d_model, num_heads),
