@@ -306,6 +306,8 @@ SelfAttention2d::SelfAttention2d(int64_t in_channels, int64_t num_heads)
   if (in_channels % num_heads != 0) {
     throw std::invalid_argument("SelfAttention2d: in_channels must be divisble by num_heads");
   }
+
+  out_proj_.set_weight(zeros(out_proj_.weight().sizes()));
 }
 
 std::vector<Tensor*> SelfAttention2d::parameters() {

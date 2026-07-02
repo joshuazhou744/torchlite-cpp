@@ -71,6 +71,8 @@ public:
   std::vector<Tensor*> parameters() override;
   const Tensor& weight() const { return weight_; }
   const Tensor& bias() const { return bias_; }
+  void set_weight(const Tensor& w) { weight_ = w; }
+  void set_bias(const Tensor& b) { bias_ = b; }
 
 private:
   Tensor weight_; // (out_channels, in_channels, kernel_size, kernel_size)
