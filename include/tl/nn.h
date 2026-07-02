@@ -138,18 +138,6 @@ private:
   Linear out_proj_; // output projection
 };
 
-// SelfAttention2d: spatial self-attention for [N, C, H, W] feature maps
-// reshapes to [N, H*W, C] for MHA, then reshapes back (MHA wrapper)
-class SelfAttention2d {
-public:
-  SelfAttention2d(int64_t in_channels, int64_t num_heads);
-  Tensor forward(const Tensor& input) const;
-  std::vector<Tensor*> parameters();
-private:
-  GroupNorm norm_;
-  MultiHeadAttention mha_;
-};
-
 // TransformerEncoderLayer: MSA and FFN with residual connections and layer normalization
 class TransformerEncoderLayer: public Module {
 public:
@@ -388,6 +376,22 @@ public:
 private:
   GroupNorm norm_;
   Linear proj_; // cond_dim -> 2 * num_channels (gamma and beta)
+};
+
+// SelfAttention2d: spatial self-attention for [N, C, H, W] feature maps
+// uses single Conv1x1 qkv_proj
+class SelfAttention2d {
+public:
+  SelfAttention2d(int64_t in_channels, int64_t num_heads);
+  Tensor forward(const Tensor& input) const;
+  std::vector<Tensor*> parameters();
+private:
+  GroupNorm norm_;
+  Conv2d qkv_proj_; // [3*C, C, 1, 1] Q, K, V packed together
+  Conv2d out_proj_; // [C, C, 1, 1]
+  int64_t in_channels_;
+  int64_t num_heads_;
+  int64_t head_dim_;
 };
 
 // InputNormalize: scalar (x - mean) / std_deviation applied to input

@@ -638,5 +638,27 @@ void test_nn() {
     assert(emb.parameters()[0]->numel() == 10 * 4);
   }
 
+  // test SelfAttention2d: output shape preserved, residual connection, has parameters
+  {
+    tl::nn::SelfAttention2d sa(8, 2); // 8 channels, 2 heads (head_dim=4)
+
+    tl::Tensor x = tl::randn({2, 8, 4, 4}); // [N=2, C=8, H=4, W=4]
+    tl::Tensor out = sa.forward(x);
+
+    // output shape matches input
+    assert(out.sizes()[0] == 2);
+    assert(out.sizes()[1] == 8);
+    assert(out.sizes()[2] == 4);
+    assert(out.sizes()[3] == 4);
+
+    // all values finite
+    for (int i = 0; i < out.numel(); ++i)
+      assert(std::isfinite(out.data()[i]));
+
+    // has parameters: norm (gamma+beta) + qkv_proj (w+b) + out_proj (w+b)
+    auto params = sa.parameters();
+    assert(!params.empty());
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }

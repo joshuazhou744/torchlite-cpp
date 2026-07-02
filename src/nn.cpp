@@ -294,16 +294,26 @@ Tensor MultiHeadAttention::forward(const Tensor& query, const Tensor& context, c
   return out_proj_.forward(out);
 }
 
-// SelfAttention2d: wrapper around MultiHeadAttention
+// SelfAttention2d: spatial self-attention using Conv1x1 QKV projection
 SelfAttention2d::SelfAttention2d(int64_t in_channels, int64_t num_heads)
   : norm_(std::max(int64_t(1), in_channels / 32), in_channels),
-    mha_(in_channels, num_heads)
-{}
+    qkv_proj_(in_channels, 3 * in_channels, 1, 1, 0),
+    out_proj_(in_channels, in_channels, 1, 1, 0),
+    in_channels_(in_channels),
+    num_heads_(num_heads),
+    head_dim_(in_channels / num_heads)
+{
+  if (in_channels % num_heads != 0) {
+    throw std::invalid_argument("SelfAttention2d: in_channels must be divisble by num_heads");
+  }
+}
 
 std::vector<Tensor*> SelfAttention2d::parameters() {
   auto p = norm_.parameters();
-  auto m = mha_.parameters();
-  p.insert(p.end(), m.begin(), m.end());
+  auto q = qkv_proj_.parameters();
+  auto o = out_proj_.parameters();
+  p.insert(p.end(), q.begin(), q.end());
+  p.insert(p.end(), o.begin(), o.end());
   return p;
 }
 
@@ -316,19 +326,31 @@ Tensor SelfAttention2d::forward(const Tensor& input) const {
   // normalize over channels first
   Tensor x = norm_.forward(input);
 
-  // [N, C, H, W] -> [N, H*W, C]
-  x = reshape(x, {N, C, H*W});
-  x = transpose(x, 1, 2);
+  // project to QKV: [N, 3C, H, W]
+  Tensor qkv = qkv_proj_.forward(x);
 
-  // self-attention over spacial tokens
-  x = mha_.forward(x);
+  // split into Q, K, V each [N, C, H, W]
+  Tensor q = slice(qkv, 1, 0, C);
+  Tensor k = slice(qkv, 1, C, C*2);
+  Tensor v = slice(qkv, 1, C*2, C*3);
 
-  // [N, H*W, C] -> [N, C, H, W]
-  x = transpose(x, 1, 2);
-  x = reshape(x, {N, C, H, W});
+  // reshape to [N, num_heads, H*W, head_dim]
+  q = reshape(q, {N, num_heads_, H*W, head_dim_});
+  k = reshape(k, {N, num_heads_, H*W, head_dim_});
+  v = reshape(v, {N, num_heads_, H*W, head_dim_});
 
-  // residual (skip) connection
-  return add(input, x);
+  // scaled dot-product attention
+  Tensor kt = transpose(k, 2, 3); // [N, num_heads, head_dim, H*W]
+  Tensor scores = scale(matmul(q, kt), 1.0f / std::sqrt((float)head_dim_)); // [N, num_heads, H*W, H*W]
+  scores = softmax(scores); // softmax over last dim
+  Tensor attn = matmul(scores, v); // [N, num_heads, H*W, head_dim]
+
+  // merge heads: [N, C, H, W]
+  attn = transpose(attn, 2, 3); // [N, num_heads, head_dim, H*W]
+  attn = reshape(attn, {N, C, H, W});
+
+  // output projection then residual
+  return add(input, out_proj_.forward(attn));
 }
 
 // Transformer encoder layer
