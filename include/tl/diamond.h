@@ -77,6 +77,8 @@ public:
       const Tensor& act // previous frame actions: [N, 4]
   ) const;
   std::vector<Tensor*> parameters();
+  std::vector<Tensor*> buffers();
+  std::vector<Tensor*> state(); // parameters() + buffers(), for save/load
 
 private:
   nn::FourierFeatures noise_emb_; // encodes scalar noise level to a cond_dim shaped noise embedding

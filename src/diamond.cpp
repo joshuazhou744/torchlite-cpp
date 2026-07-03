@@ -207,7 +207,6 @@ std::vector<Tensor*> InnerModel::parameters() {
     auto p = m.parameters();
     params.insert(params.end(), p.begin(), p.end());
   };
-  append(noise_emb_);
   append(act_emb_);
   append(cond_proj1_);
   append(cond_proj2_);
@@ -216,6 +215,19 @@ std::vector<Tensor*> InnerModel::parameters() {
   append(norm_out_);
   append(conv_out_);
   return params;
+}
+
+std::vector<Tensor*> InnerModel::buffers() {
+  return noise_emb_.buffers();
+}
+
+std::vector<Tensor*> InnerModel::state() {
+  std::vector<Tensor*> s;
+  auto b = buffers();
+  s.insert(s.end(), b.begin(), b.end());
+  auto p = parameters();
+  s.insert(s.end(), p.begin(), p.end());
+  return s;
 }
 
 Tensor InnerModel::forward(

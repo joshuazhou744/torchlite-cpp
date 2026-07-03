@@ -21,11 +21,13 @@ int main(int argc, char** argv) {
 
   tl::diamond::InnerModel model(cfg);
 
-  auto params = model.parameters();
-  std::cout << "InnerModel has " << params.size() << " parameter tensors" << std::endl;
+  auto state = model.state();
+  std::cout << "InnerModel has " << state.size() << " tensors (params + buffers)" << std::endl;
 
-  tl::load_model(model_path, params);
+  tl::load_model(model_path, state);
   std::cout << "Loaded weights successfully!" << std::endl;
+
+  tl::save_model("test.tl", state);
 
   return 0;
 }
