@@ -56,13 +56,13 @@ private:
 };
 
 struct InnerModelConfig {
-  int64_t img_channels;
-  int64_t num_steps_conditioning;
-  int64_t cond_dim;
-  std::vector<int64_t> depths;
-  std::vector<int64_t> channels;
-  std::vector<int64_t> attn_depths;
-  std::optional<int64_t> num_actions;
+  int64_t img_channels; // pixel channels (3 for RGB)
+  int64_t num_steps_conditioning; // number of previous frames used for context
+  int64_t cond_dim; // channels of the conditioning tensor
+  std::vector<int64_t> depths; // vector of number of residual blocks at each layer
+  std::vector<int64_t> channels; // feature channels at each layer
+  std::vector<int64_t> attn_depths; // truthy vector for optional self-attention at each layer
+  std::optional<int64_t> num_actions; // size of action space for action embedding
 };
 
 // InnerModel: full DIAMOND denoising network

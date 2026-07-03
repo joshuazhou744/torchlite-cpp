@@ -78,6 +78,7 @@ std::pair<Tensor, std::vector<Tensor>> ResidualBlocks::forward(const Tensor& x, 
   return {h, outputs};
 }
 
+// UNet
 UNet::UNet(int64_t cond_dim, std::vector<int64_t> depths, std::vector<int64_t> channels, std::vector<int64_t> attn_depths, int64_t gn_group_size, int64_t attn_head_dim)
   : num_down_((int64_t)channels.size() - 1)
 {
@@ -181,6 +182,26 @@ Tensor UNet::forward(const Tensor& x, const Tensor& cond) const {
   // crop padding
   return slice(slice(h, 2, 0, H), 3, 0, W);
 }
+
+// Inner model
+InnerModel::InnerModel(InnerModelConfig cfg)
+  : noise_emb_(cfg.cond_dim),
+    act_emb_(cfg.num_actions.value(), cfg.cond_dim / cfg.num_steps_conditioning),
+    flatten_(),
+    cond_proj1_(cfg.cond_dim, cfg.cond_dim),
+    silu_(),
+    cond_proj2_(cfg.cond_dim, cfg.cond_dim),
+    conv_in_((cfg.num_steps_conditioning + 1) * cfg.img_channels, cfg.channels[0], 3, 1, 1),
+    unet_(cfg.cond_dim, cfg.depths, cfg.channels, cfg.attn_depths),
+    norm_out_(std::max(int64_t(1), cfg.channels[0] / 32), cfg.channels[0]),
+    conv_out_(cfg.channels[0], cfg.img_channels, 3, 1, 1)
+{
+  if (cfg.cond_dim % cfg.num_steps_conditioning != 0) {
+    throw std::invalid_argument("InnerModel: cond_dim must be divisible by num_steps_conditioning");
+  }
+  conv_out_.set_weight(zeros(conv_out_.weight().sizes()));
+}
+
 
 } // diamond
 } // tl
