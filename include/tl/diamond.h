@@ -83,7 +83,6 @@ private:
   nn::Embedding act_emb_; // looks up action embeddings
   nn::Flatten flatten_; // flatten action embedding to cond_dim
   nn::Linear cond_proj1_; // first linear projection of conditioning tensor
-  nn::SiLU silu_; // activation beween linear layers that mix noise and action embeddings
   nn::Linear cond_proj2_; // second linear projection of conditioning tensor
   nn::Conv2d conv_in_; // project input frames to UNet channel dim
   UNet unet_; // encoder-bottleneck-decoder

@@ -189,7 +189,6 @@ InnerModel::InnerModel(InnerModelConfig cfg)
     act_emb_(cfg.num_actions.value(), cfg.cond_dim / cfg.num_steps_conditioning),
     flatten_(),
     cond_proj1_(cfg.cond_dim, cfg.cond_dim),
-    silu_(),
     cond_proj2_(cfg.cond_dim, cfg.cond_dim),
     conv_in_((cfg.num_steps_conditioning + 1) * cfg.img_channels, cfg.channels[0], 3, 1, 1),
     unet_(cfg.cond_dim, cfg.depths, cfg.channels, cfg.attn_depths),
@@ -217,6 +216,28 @@ std::vector<Tensor*> InnerModel::parameters() {
   append(norm_out_);
   append(conv_out_);
   return params;
+}
+
+Tensor InnerModel::forward(
+    const Tensor& noisy_next_obs, // noisy version of the next frame: [N, img_channels, H, W]
+    const Tensor& c_noise, // scalar noise: [N]
+    const Tensor& obs, // previous num_steps_conditioning frames: [N, num_steps_conditioning * img_channels, H, W]
+    const Tensor& act // actions mapped to preivous frames: [N, num_steps_conditioning]
+) const {
+  // noise + action embedding -> conditoning vector
+  Tensor noise_embedding = noise_emb_.forward(c_noise);
+  Tensor act_embedding = flatten_.forward(act_emb_.forward(act));
+  Tensor cond = cond_proj2_.forward(silu(cond_proj1_.forward(add(noise_embedding, act_embedding))));
+
+  // project input frames to UNet channel dim
+  Tensor x = conv_in_.forward(cat({obs, noisy_next_obs}, 1)); // [N, 15, H, W]
+
+  // UNet
+  x = unet_.forward(x, cond);
+
+  // output projection
+  x = conv_out_.forward(silu(norm_out_.forward(x)));
+  return x;
 }
 
 } // diamond
