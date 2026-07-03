@@ -75,7 +75,7 @@ public:
       const Tensor& c_noise, // scalar noise conditioning: [N]
       const Tensor& obs, // previous 4 frames: [N, 12, H, W]
       const Tensor& act // previous frame actions: [N, 4]
-) const;
+  ) const;
   std::vector<Tensor*> parameters();
 
 private:

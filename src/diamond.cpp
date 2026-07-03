@@ -202,6 +202,22 @@ InnerModel::InnerModel(InnerModelConfig cfg)
   conv_out_.set_weight(zeros(conv_out_.weight().sizes()));
 }
 
+std::vector<Tensor*> InnerModel::parameters() {
+  std::vector<Tensor*> params;
+  auto append = [&](auto& m) {
+    auto p = m.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  };
+  append(noise_emb_);
+  append(act_emb_);
+  append(cond_proj1_);
+  append(cond_proj2_);
+  append(conv_in_);
+  append(unet_);
+  append(norm_out_);
+  append(conv_out_);
+  return params;
+}
 
 } // diamond
 } // tl
