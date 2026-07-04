@@ -89,7 +89,11 @@ if(BUILD_EXAMPLES)
   add_executable(mnist_cnn examples/mnist_cnn.cpp)
   target_link_libraries(mnist_cnn PRIVATE torchlite)
 
-  add_executable(diamond_main examples/diamond/main.cpp)
+  add_executable(diamond_main
+    examples/diamond/main.cpp
+    examples/diamond/denoiser.cpp
+    examples/diamond/sampler.cpp
+  )
   target_link_libraries(diamond_main PRIVATE torchlite)
 endif()
 
