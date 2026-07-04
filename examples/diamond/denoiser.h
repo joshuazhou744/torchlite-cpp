@@ -11,11 +11,18 @@ struct Conditioners {
   tl::Tensor c_noise;
 };
 
+// Denoiser config
+struct DenoiserConfig {
+  tl::diamond::InnerModelConfig inner_model;
+  float sigma_data; // natural variation clean image pixel values
+  float sigma_offset_noise; // extra noise per-channel before pixel noise (baseline noise)
+};
+
 // EDM preconditioning wrapper around InnerModel
 // also converts InnerModel output -> denoised frame prediction
 class Denoiser {
 public:
-  Denoiser(tl::diamond::InnerModel& inner_model, float sigma_data, float sigma_offset_noise);
+  Denoiser(tl::diamond::InnerModel& inner_model, DenoiserConfig cfg);
   // single denoising step
   tl::Tensor denoise(const tl::Tensor& noisy_next_obs, const tl::Tensor& sigma, const tl::Tensor& obs, const tl::Tensor& act) const;
 
@@ -25,6 +32,5 @@ private:
   tl::Tensor wrap_model_output(const tl::Tensor& noisy_next_obs, const tl::Tensor& model_output, const Conditioners& cs) const;
 
   tl::diamond::InnerModel& inner_model_;
-  float sigma_data_; // natural variation clean image pixel values
-  float sigma_offset_noise_; // extra noise per-channel before pixel noise (baseline noise)
+  DenoiserConfig cfg_;
 };

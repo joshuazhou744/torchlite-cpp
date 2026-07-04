@@ -5,8 +5,8 @@
 #include <cmath>
 #include <cstdint>
 
-Denoiser::Denoiser(tl::diamond::InnerModel& inner_model, float sigma_data, float sigma_offset_noise)
-  : inner_model_(inner_model), sigma_data_(sigma_data), sigma_offset_noise_(sigma_offset_noise)
+Denoiser::Denoiser(tl::diamond::InnerModel& inner_model, DenoiserConfig cfg)
+  : inner_model_(inner_model), cfg_(cfg)
 {}
 
 Conditioners Denoiser::compute_conditioners(const tl::Tensor& sigma) const {
@@ -14,10 +14,10 @@ Conditioners Denoiser::compute_conditioners(const tl::Tensor& sigma) const {
 
   // effective sigma: sqrt(sigma^2 + sigma_offset_noise^2)
   Tensor sigma_sq = pow(sigma, 2.0f);
-  Tensor off_sq = full({1}, sigma_offset_noise_ * sigma_offset_noise_);
+  Tensor off_sq = full({1}, cfg_.sigma_offset_noise * cfg_.sigma_offset_noise);
   Tensor sigma_eff = sqrt(add(sigma_sq, off_sq)); // [N]
 
-  Tensor data_sq = full({1}, sigma_data_ * sigma_data_);
+  Tensor data_sq = full({1}, cfg_.sigma_data * cfg_.sigma_data);
   Tensor sigma_eff_sq = pow(sigma_eff, 2.0f);
   Tensor denom = add(sigma_eff_sq, data_sq);
 
@@ -38,7 +38,7 @@ Conditioners Denoiser::compute_conditioners(const tl::Tensor& sigma) const {
 
 tl::Tensor Denoiser::compute_model_output(const tl::Tensor& noisy_next_obs, const tl::Tensor& obs, const tl::Tensor& act, const Conditioners& cs) const {
   using namespace tl;
-  Tensor rescaled_obs = scale(obs, 1.0f / sigma_data_);
+  Tensor rescaled_obs = scale(obs, 1.0f / cfg_.sigma_data);
   Tensor rescaled_noise = mul(noisy_next_obs, cs.c_in);
   return inner_model_.forward(rescaled_noise, cs.c_noise, rescaled_obs, act);
 }

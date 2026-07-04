@@ -1,5 +1,8 @@
 #include <tl/diamond.h>
 #include <tl/model_io.h>
+#include <tl/factory.h>
+#include "denoiser.h"
+#include "sampler.h"
 #include <iostream>
 #include <string>
 
@@ -10,24 +13,31 @@ int main(int argc, char** argv) {
   }
   std::string model_path = argv[1];
 
-  tl::diamond::InnerModelConfig cfg;
-  cfg.img_channels = 3;
-  cfg.num_steps_conditioning = 4;
-  cfg.cond_dim = 256;
-  cfg.depths = {2, 2, 2, 2};
-  cfg.channels = {64, 64, 64, 64};
-  cfg.attn_depths = {0, 0, 0, 0};
-  cfg.num_actions = 4; // Breakout: NOOP, FIRE, RIGHT, LEFT
+  DenoiserConfig cfg;
+  cfg.inner_model.img_channels = 3;
+  cfg.inner_model.num_steps_conditioning = 4;
+  cfg.inner_model.cond_dim = 256;
+  cfg.inner_model.depths = {2, 2, 2, 2};
+  cfg.inner_model.channels = {64, 64, 64, 64};
+  cfg.inner_model.attn_depths = {0, 0, 0, 0};
+  cfg.inner_model.num_actions = 4; // Breakout: NOOP, FIRE, RIGHT, LEFT
+  cfg.sigma_data = 0.5f;
+  cfg.sigma_offset_noise = 0.3f;
 
-  tl::diamond::InnerModel model(cfg);
-
+  // build inner model
+  tl::diamond::InnerModel model(cfg.inner_model);
   auto state = model.state();
-  std::cout << "InnerModel has " << state.size() << " tensors (params + buffers)" << std::endl;
-
   tl::load_model(model_path, state);
-  std::cout << "Loaded weights successfully!" << std::endl;
+  std::cout << "Loaded " << state.size() << " tensors" << std::endl;
 
-  tl::save_model("test.tl", state);
+  // wrap in denoiser and sampler
+  Denoiser denoiser(model, cfg);
+  DiffusionSamplerConfig scfg;
+  scfg.num_steps_denoising = 3;
+  DiffusionSampler sampler(denoiser, scfg);
+
+  // generate a frame
+  //tl::Tensor next_frame = sampler.sample(prev_obs, prev_act);
 
   return 0;
 }
