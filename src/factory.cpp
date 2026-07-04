@@ -56,6 +56,25 @@ Tensor arange(int start, int end) {
   return out;
 }
 
+// evenly spaced tensor
+Tensor linspace(float start, float end, int64_t steps) {
+  if (steps <= 0) {
+    throw std::invalid_argument("linspace: steps must be positive");
+  }
+
+  Tensor out({steps});
+  float* op = out.data();
+  if (steps == 1) {
+    op[0] = start;
+    return out;
+  }
+  float step = (end - start) / (steps - 1);
+  for (int64_t i = 0; i < steps; ++i) {
+    op[i] = start + step * i;
+  }
+  return out;
+}
+
 // load PyTorch tensors
 Tensor load(const std::string& path, const std::vector<int64_t>& sizes) {
   Tensor out(sizes);

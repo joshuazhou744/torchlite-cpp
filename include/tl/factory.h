@@ -21,6 +21,9 @@ Tensor randn(const std::vector<int64_t>& sizes);
 // 1D tensor in the given range of values
 Tensor arange(int start, int end);
 
+// steps values evenly spaced from start to end (inclusive)
+Tensor linspace(float start, float end, int64_t steps);
+
 // load PyTorch tensors
 Tensor load(const std::string& path, const std::vector<int64_t>& sizes);
 
