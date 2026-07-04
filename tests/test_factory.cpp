@@ -3,6 +3,7 @@
 #include <tl/factory.h>
 #include <cassert>
 #include <cmath>
+#include "test_utils.h"
 
 void test_factory() {
   // test full: all elements should equal the given value
@@ -57,6 +58,27 @@ void test_factory() {
   assert(a2.sizes()[0] == 3);
   assert(a2.data()[0] == 0.0f);
   assert(a2.data()[2] == 2.0f);
+
+  // test linspace: 5 points from 0 to 1 inclusive -> [0, 0.25, 0.5, 0.75, 1]
+  tl::Tensor ls = tl::linspace(0.0f, 1.0f, 5);
+  assert(ls.sizes().size() == 1);
+  assert(ls.sizes()[0] == 5);
+  assert(is_close(ls.data()[0], 0.0f));
+  assert(is_close(ls.data()[1], 0.25f));
+  assert(is_close(ls.data()[2], 0.5f));
+  assert(is_close(ls.data()[3], 0.75f));
+  assert(is_close(ls.data()[4], 1.0f));
+
+  // test linspace endpoints inclusive over a non-unit range: [2, 4, 6, 8]
+  tl::Tensor ls2 = tl::linspace(2.0f, 8.0f, 4);
+  assert(ls2.sizes()[0] == 4);
+  assert(is_close(ls2.data()[0], 2.0f));
+  assert(is_close(ls2.data()[3], 8.0f));
+
+  // test linspace with steps == 1 returns just start
+  tl::Tensor ls3 = tl::linspace(3.0f, 9.0f, 1);
+  assert(ls3.sizes()[0] == 1);
+  assert(is_close(ls3.data()[0], 3.0f));
 
   std::cout << "factory tests passed" << std::endl;
 }
