@@ -17,8 +17,8 @@ inline bool& grad_enabled() { static bool e = true; return e; }
 void release_graph(Tensor& root);
 
 struct NoGradGuard {
-  NoGradGuard() { grad_enabled() = false; }
-  ~NoGradGuard() { grad_enabled() = true; }
+  NoGradGuard() : prev(grad_enabled()) { grad_enabled() = false; }
+  ~NoGradGuard() { grad_enabled() = prev; }
 };
 
 // base class for ALL backward functions

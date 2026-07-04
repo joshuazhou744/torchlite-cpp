@@ -1,6 +1,7 @@
 #include "sampler.h"
 #include <tl/factory.h>
 #include <tl/ops.h>
+#include <tl/autograd.h>
 #include <cmath>
 #include <cstdint>
 
@@ -17,11 +18,12 @@ static tl::Tensor build_sigmas(int64_t num_steps, float sigma_min, float sigma_m
   return cat({sigmas, zeros({1})}, 0);
 }
 
-DiffusionSampler::DiffusionSampler(const Denoiser& denoiser, DiffusionSamplerConfig cfg) {
-  
-}
+DiffusionSampler::DiffusionSampler(const Denoiser& denoiser, DiffusionSamplerConfig cfg)
+  : denoiser_(denoiser), cfg_(cfg),
+    sigmas_(build_sigmas(cfg.num_steps_denoising, cfg.sigma_min, cfg.sigma_max, cfg.rho))
+{}
 
 
 tl::Tensor DiffusionSampler::sample(const tl::Tensor& prev_obs, const tl::Tensor& prev_act) const {
-
+  tl::NoGradGuard no_grad;
 }

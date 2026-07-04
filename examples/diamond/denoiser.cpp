@@ -1,6 +1,7 @@
 #include "denoiser.h"
 #include <tl/ops.h>
 #include <tl/factory.h>
+#include <tl/autograd.h>
 #include <cmath>
 #include <cstdint>
 
@@ -45,6 +46,7 @@ tl::Tensor Denoiser::compute_model_output(const tl::Tensor& noisy_next_obs, cons
 
 tl::Tensor Denoiser::wrap_model_output(const tl::Tensor& noisy_next_obs, const tl::Tensor& model_output, const Conditioners& cs) const {
   using namespace tl;
+  NoGradGuard no_grad;
 
   Tensor d = add(mul(noisy_next_obs, cs.c_skip), mul(model_output, cs.c_out));
   d = clamp(d, -1.0f, 1.0f);
@@ -61,6 +63,7 @@ tl::Tensor Denoiser::wrap_model_output(const tl::Tensor& noisy_next_obs, const t
 
 tl::Tensor Denoiser::denoise(const tl::Tensor& noisy_next_obs, const tl::Tensor& sigma, const tl::Tensor& obs, const tl::Tensor& act) const {
   using namespace tl;
+  NoGradGuard no_grad;
 
   Conditioners cs = compute_conditioners(sigma);
   Tensor model_output = compute_model_output(noisy_next_obs, obs, act, cs);
