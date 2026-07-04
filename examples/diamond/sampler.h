@@ -19,7 +19,7 @@ struct DiffusionSamplerConfig {
 class DiffusionSampler {
 public:
   DiffusionSampler(const Denoiser& denoiser, DiffusionSamplerConfig cfg);
-  // generate one next frame given previous 4 (prev_obs) and their respective actions (prev_act)
+  // generate next frame given previous 4 frames (prev_obs) and their respective actions (prev_act)
   tl::Tensor sample(const tl::Tensor& prev_obs, const tl::Tensor& prev_act) const;
 
 private:
