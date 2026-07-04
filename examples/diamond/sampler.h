@@ -2,7 +2,6 @@
 
 #include "denoiser.h"
 #include <tl/tensor.h>
-#include <vector>
 #include <cstdint>
 
 // config for EDM sigma scheduler and ODE solver
@@ -25,5 +24,5 @@ public:
 private:
   const Denoiser& denoiser_;
   DiffusionSamplerConfig cfg_;
-  std::vector<float> sigmas_;
+  tl::Tensor sigmas_;
 };
