@@ -112,6 +112,12 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class TanhBackward: public GradFunction {
+public:
+  Tensor output_cache; // derivative is 1 - y^2
+  void backward(const Tensor& grad_output) override;
+};
+
 class GeluBackward: public GradFunction {
 public:
   Tensor input_cache;

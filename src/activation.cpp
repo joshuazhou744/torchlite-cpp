@@ -79,4 +79,24 @@ Tensor silu(const Tensor& input) {
   return mul(input, sigmoid(input));
 }
 
+// unary Tanh
+Tensor tanh(const Tensor& input) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  for (int64_t i = 0; i < a.numel(); ++i) {
+    op[i] = std::tanh(ap[i]);
+  }
+
+  if (input.requires_grad) {
+    if (auto fn = track<TanhBackward>(out, {&input})) {
+      fn->output_cache = out.contiguous();
+    }
+  }
+
+  return out;
+}
+
 }

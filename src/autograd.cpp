@@ -163,6 +163,20 @@ void SigmoidBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], result);
 }
 
+void TanhBackward::backward(const Tensor& grad_output) {
+  // d_in = grad * (1 - out^2)
+  Tensor out = output_cache.contiguous();
+  Tensor g = grad_output.contiguous();
+  Tensor result(out.sizes());
+  const float* op = out.data();
+  const float* gp = g.data();
+  float* rp = result.data();
+  for (int64_t i = 0; i < out.numel(); ++i) {
+    rp[i] = gp[i] * (1.0f - op[i] * op[i]);
+  }
+  accumulate_grad(inputs[0], result);
+}
+
 void GeluBackward::backward(const Tensor& grad_output) {
   // forward gelu uses tanh approximation:
   // u = sqrt(2/n) * (x + 0.044715 * x^3)
