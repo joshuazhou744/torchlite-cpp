@@ -42,5 +42,14 @@ void test_activation() {
   assert(is_close(res_silu.data()[1], 0.7311f, 1e-4));
   assert(is_close(res_silu.data()[2], -0.0335f, 1e-3));
 
+  // test tanh: tanh(0) = 0, tanh(1) = 0.7616, tanh(-1) = -0.7616, tanh(large) ~ 1
+  tl::Tensor t({4});
+  t.data()[0] = 0.0f; t.data()[1] = 1.0f; t.data()[2] = -1.0f; t.data()[3] = 20.0f;
+  tl::Tensor res_tanh = tl::tanh(t);
+  assert(is_close(res_tanh.data()[0], 0.0f));
+  assert(is_close(res_tanh.data()[1], 0.7616f, 1e-4));
+  assert(is_close(res_tanh.data()[2], -0.7616f, 1e-4));
+  assert(is_close(res_tanh.data()[3], 1.0f, 1e-4));
+
   std::cout << "activation tests passed" << std::endl;
 }

@@ -99,6 +99,21 @@ void test_autograd() {
     std::cout << "  SigmoidBackward ok\n";
   }
 
+  // TanhBackward: d/dx = 1 - tanh(x)^2
+  {
+    tl::Tensor x({2});
+    x.data()[0] = 0.0f;  // tanh(0) = 0, derivative = 1
+    x.data()[1] = 1.0f;  // tanh(1) = 0.7616, derivative = 1 - 0.7616^2 = 0.4200
+    x.set_requires_grad(true);
+
+    tl::Tensor y = tl::tanh(x);
+    y.backward();
+
+    assert(close(x.grad().data()[0], 1.0f));
+    assert(close(x.grad().data()[1], 0.42f));
+    std::cout << "  TanhBackward ok\n";
+  }
+
   // Chain rule: y = (a * b) + c, d/da = b, d/db = a, d/dc = 1
   {
     tl::Tensor a({2}); tl::Tensor b({2}); tl::Tensor c({2});
