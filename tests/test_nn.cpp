@@ -660,5 +660,71 @@ void test_nn() {
     assert(!params.empty());
   }
 
+  // test LSTMCell: state shapes, h_t bounded by tanh, param count
+  {
+    tl::nn::LSTMCell cell(3, 8); // input_size=3, hidden_size=8
+
+    tl::Tensor x_t = tl::randn({2, 3});
+    tl::Tensor h0 = tl::zeros({2, 8});
+    tl::Tensor c0 = tl::zeros({2, 8});
+    auto [h_t, c_t] = cell.forward(x_t, h0, c0);
+
+    // both states are [N, hidden_size]
+    assert(h_t.sizes()[0] == 2 && h_t.sizes()[1] == 8);
+    assert(c_t.sizes()[0] == 2 && c_t.sizes()[1] == 8);
+
+    // h_t = o_t * tanh(c_t) with o_t in (0,1), so |h_t| < 1 always
+    for (int i = 0; i < h_t.numel(); ++i) {
+      assert(std::isfinite(h_t.data()[i]));
+      assert(std::abs(h_t.data()[i]) < 1.0f);
+    }
+
+    // zero input + zero states -> candidate g_t = tanh(0 bias) = 0 -> c_t = 0, h_t = 0
+    // holds regardless of random weights since z is all zeros
+    tl::Tensor xz = tl::zeros({2, 3});
+    auto [hz, cz] = cell.forward(xz, h0, c0);
+    for (int i = 0; i < hz.numel(); ++i) {
+      assert(is_close(cz.data()[i], 0.0f));
+      assert(is_close(hz.data()[i], 0.0f));
+    }
+
+    // 4 gates x (weight + bias) = 8 parameters
+    assert(cell.parameters().size() == 8);
+  }
+
+  // test LSTM: [N, T, input] -> final states [N, hidden], shape validation throws
+  {
+    tl::nn::LSTM lstm(3, 8);
+
+    tl::Tensor x = tl::randn({2, 5, 3}); // [N=2, T=5, input=3]
+    auto [h_T, c_T] = lstm.forward(x);
+
+    assert(h_T.sizes()[0] == 2 && h_T.sizes()[1] == 8);
+    assert(c_T.sizes()[0] == 2 && c_T.sizes()[1] == 8);
+    for (int i = 0; i < h_T.numel(); ++i)
+      assert(std::isfinite(h_T.data()[i]));
+
+    // parameters pass through from the cell
+    assert(lstm.parameters().size() == 8);
+
+    // wrong input_size (last dim 4 != 3) must throw
+    bool threw = false;
+    try {
+      lstm.forward(tl::randn({2, 5, 4}));
+    } catch (const std::invalid_argument&) {
+      threw = true;
+    }
+    assert(threw);
+
+    // 2D input must throw
+    threw = false;
+    try {
+      lstm.forward(tl::randn({2, 5}));
+    } catch (const std::invalid_argument&) {
+      threw = true;
+    }
+    assert(threw);
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }
