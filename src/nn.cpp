@@ -8,6 +8,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <vector>
+#include <tuple>
 
 namespace tl {
 namespace nn {
@@ -984,6 +985,37 @@ std::vector<Tensor*> LSTMCell::parameters() {
   append(candidate_linear_);
   append(output_linear_);
   return params;
+}
+
+// LSTM
+LSTM::LSTM(int64_t input_size, int64_t hidden_size)
+  : cell_(input_size, hidden_size),
+    input_size_(input_size),
+    hidden_size_(hidden_size)
+{}
+
+std::pair<Tensor, Tensor> LSTM::forward(const Tensor& x) const {
+  if (x.sizes().size() != 3 || x.sizes()[2] != input_size_) {
+    throw std::invalid_argument("LSTM: expected input [N, T, input_size]");
+  }
+
+  int64_t N = x.sizes()[0];
+  int64_t T = x.sizes()[1];
+
+  // initial state are zero
+  Tensor h_t = zeros({N, hidden_size_});
+  Tensor c_t = zeros({N, hidden_size_});
+
+  // loop over each timestep
+  for (int64_t t = 0; t < T; ++t) {
+    Tensor x_t = reshape(slice(x, 1, t, t + 1), {N, input_size_}); // [N, 1, input] -> [N, input]
+    std::tie(h_t, c_t) = cell_.forward(x_t, h_t, c_t);
+  }
+  return {h_t, c_t};
+}
+
+std::vector<Tensor*> LSTM::parameters() {
+  return cell_.parameters();
 }
 
 }

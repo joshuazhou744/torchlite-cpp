@@ -477,5 +477,18 @@ private:
   int64_t hidden_size_;
 };
 
+// LSTM: runs an LSTMCell over a sequence of timesteps
+class LSTM {
+public:
+  LSTM(int64_t input_size, int64_t hidden_size);
+  // x: [N, T, input_size]
+  std::pair<Tensor, Tensor> forward(const Tensor& x) const; // returns h_T, c_T
+  std::vector<Tensor*> parameters();
+private:
+  LSTMCell cell_; // one cell reused every timestep
+  int64_t input_size_;
+  int64_t hidden_size_;
+};
+
 } // nn
 } // tl
