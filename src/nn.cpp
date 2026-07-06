@@ -338,12 +338,11 @@ Tensor SelfAttention2d::forward(const Tensor& input) const {
   Tensor v = slice(qkv, 1, C*2, C*3);
 
   // reshape to [N, num_heads, H*W, head_dim]
-  q = reshape(q, {N, num_heads_, H*W, head_dim_});
-  k = reshape(k, {N, num_heads_, H*W, head_dim_});
-  v = reshape(v, {N, num_heads_, H*W, head_dim_});
+  q = transpose(reshape(q, {N, num_heads_, head_dim_, H*W}), 2, 3);
+  Tensor kt = reshape(k, {N, num_heads_, head_dim_, H*W});
+  v = transpose(reshape(v, {N, num_heads_, head_dim_, H*W}), 2, 3);
 
   // scaled dot-product attention
-  Tensor kt = transpose(k, 2, 3); // [N, num_heads, head_dim, H*W]
   Tensor scores = scale(matmul(q, kt), 1.0f / std::sqrt((float)head_dim_)); // [N, num_heads, H*W, H*W]
   scores = softmax(scores); // softmax over last dim
   Tensor attn = matmul(scores, v); // [N, num_heads, H*W, head_dim]
@@ -353,7 +352,7 @@ Tensor SelfAttention2d::forward(const Tensor& input) const {
   attn = reshape(attn, {N, C, H, W});
 
   // output projection then residual
-  return add(x, out_proj_.forward(attn));
+  return add(input, out_proj_.forward(attn));
 }
 
 // Transformer encoder layer

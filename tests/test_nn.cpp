@@ -638,26 +638,40 @@ void test_nn() {
     assert(emb.parameters()[0]->numel() == 10 * 4);
   }
 
-  // test SelfAttention2d: output shape preserved, residual connection, has parameters
+  // test SelfAttention2d: golden values against an independent reference.
+  // params filled with sin(0.37*g) (one counter across gamma, beta, qkv_w,
+  // qkv_b, out_w, out_b in parameters() order), input filled with sin(0.9*i).
+  // expected values computed with explicit per-pixel token gathering, so this
+  // catches head-split layout bugs and residual-from-normed-input bugs that
+  // shape/finiteness checks can't see.
   {
-    tl::nn::SelfAttention2d sa(8, 2); // 8 channels, 2 heads (head_dim=4)
+    tl::nn::SelfAttention2d sa(4, 2); // C=4, heads=2, head_dim=2
 
-    tl::Tensor x = tl::randn({2, 8, 4, 4}); // [N=2, C=8, H=4, W=4]
+    int g = 0;
+    for (auto* p : sa.parameters())
+      for (int64_t i = 0; i < p->numel(); ++i)
+        p->data()[i] = std::sin(0.37f * g++);
+
+    tl::Tensor x({1, 4, 2, 2});
+    for (int i = 0; i < 16; ++i)
+      x.data()[i] = std::sin(0.9f * i);
+
     tl::Tensor out = sa.forward(x);
 
     // output shape matches input
-    assert(out.sizes()[0] == 2);
-    assert(out.sizes()[1] == 8);
-    assert(out.sizes()[2] == 4);
-    assert(out.sizes()[3] == 4);
+    assert(out.sizes()[0] == 1);
+    assert(out.sizes()[1] == 4);
+    assert(out.sizes()[2] == 2);
+    assert(out.sizes()[3] == 2);
 
-    // all values finite
-    for (int i = 0; i < out.numel(); ++i)
-      assert(std::isfinite(out.data()[i]));
-
-    // has parameters: norm (gamma+beta) + qkv_proj (w+b) + out_proj (w+b)
-    auto params = sa.parameters();
-    assert(!params.empty());
+    float expected[16] = {
+      -1.258520f, -0.462126f, -0.247596f, -0.782179f,
+      -4.105524f, -4.683682f, -4.591241f, -3.888459f,
+      1.445272f, 1.600603f, 0.998452f, 0.101173f,
+      3.462054f, 3.720366f, 4.620250f, 5.472198f,
+    };
+    for (int i = 0; i < 16; ++i)
+      assert(is_close(out.data()[i], expected[i], 1e-3));
   }
 
   // test LSTMCell: state shapes, h_t bounded by tanh, param count
