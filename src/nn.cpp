@@ -940,5 +940,51 @@ Tensor FourierFeatures::forward(const Tensor& input) const {
   return cat({cos(f), sin(f)}, 1); // [N, cond_dim]
 }
 
+// LSTMCell
+LSTMCell::LSTMCell(int64_t input_size, int64_t hidden_size)
+  : forget_linear_(input_size + hidden_size, hidden_size),
+    input_linear_(input_size + hidden_size, hidden_size),
+    candidate_linear_(input_size + hidden_size, hidden_size),
+    output_linear_(input_size + hidden_size, hidden_size),
+    hidden_size_(hidden_size)
+{
+  // init forget gate bias to 1.0 so cell starts off remembering lots from c_prev
+  Tensor b = full({hidden_size}, 1.0f);
+  b.set_requires_grad(true);
+  forget_linear_.set_bias(b);
+}
+
+
+std::pair<Tensor, Tensor> LSTMCell::forward(const Tensor& x_t, const Tensor& h_prev, const Tensor& c_prev) const {
+  // current input and previous hidden state
+  Tensor z = cat({x_t, h_prev}, 1);
+
+  Tensor f_t = sigmoid(forget_linear_.forward(z)); // keep fraction of old memory
+  Tensor i_t = sigmoid(input_linear_.forward(z)); // write fraction of candidate
+  Tensor g_t = tanh(candidate_linear_.forward(z)); // candidate cell state
+
+  // update cell state: weighted sum of old memory and candidate cell state
+  Tensor c_t = add(mul(f_t, c_prev), mul(i_t, g_t));
+
+  // hidden state
+  Tensor o_t = sigmoid(output_linear_.forward(z));
+  Tensor h_t = mul(o_t, tanh(c_t));
+
+  return {h_t, c_t};
+}
+
+std::vector<Tensor*> LSTMCell::parameters() {
+  std::vector<Tensor*> params;
+  auto append = [&](auto& layer) {
+    auto p = layer.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  };
+  append(forget_linear_);
+  append(input_linear_);
+  append(candidate_linear_);
+  append(output_linear_);
+  return params;
+}
+
 }
 }

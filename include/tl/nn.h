@@ -3,6 +3,7 @@
 #include <tl/tensor.h>
 #include <tl/activation.h>
 #include <tl/ops.h>
+#include <utility>
 
 namespace tl {
 namespace nn {
@@ -457,6 +458,23 @@ class Identity: public Module {
 public:
   Tensor forward(const Tensor& input) const override { return input; }
   std::vector<Tensor*> parameters() override { return {}; }
+};
+
+// LSTMCell: one LSTM timestep
+class LSTMCell {
+public:
+  LSTMCell(int64_t input_size, int64_t hidden_size);
+  // x_t: [N, input_size]
+  // h_prev, c_prev: [N, hidden_size]
+  // forward returns h_t, c_t
+  std::pair<Tensor, Tensor> forward(const Tensor& x_t, const Tensor& h_prev, const Tensor& c_prev) const;
+  std::vector<Tensor*> parameters();
+private:
+  Linear forget_linear_; // f_t = sigmoid(forget_linear_(z)), what to forget from c_prev
+  Linear input_linear_; // i_t = sigmoid(input_linear_(z)), what to keep from candidate
+  Linear candidate_linear_; // g_t = tanh(candidate_linear_(z)), candidate cell state
+  Linear output_linear_; // o_t = sigmoid(output_linear_(z)), what to expose from c_t to form h_t
+  int64_t hidden_size_;
 };
 
 } // nn
