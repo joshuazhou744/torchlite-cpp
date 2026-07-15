@@ -100,6 +100,21 @@ private:
   float eps_; // tiny epsilon to avoid division by 0
 };
 
+// RMS normalization: out = x / sqrt(mean(x^2, last_dim) + eps) * gamma
+// normalizes over last dim only and gamma broadcasts over leading dims
+class RMSNorm: public Module {
+public:
+  RMSNorm(const std::vector<int64_t>& gamma_shape, float eps = 1e-5);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_gamma(const Tensor& g) { gamma_ = g; }
+  const Tensor& gamma() const { return gamma_; }
+
+private:
+  Tensor gamma_;
+  float eps_;
+};
+
 // Dropout: turn random elements to zero during training
 class Dropout: public Module {
 public:

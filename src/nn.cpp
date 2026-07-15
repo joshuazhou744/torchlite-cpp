@@ -145,6 +145,28 @@ std::vector<Tensor*> LayerNorm::parameters() {
   return {&gamma_, &beta_};
 }
 
+// RMS normalization
+RMSNorm::RMSNorm(const std::vector<int64_t>& gamma_shape, float eps)
+  : gamma_(ones(gamma_shape)),
+    eps_(eps)
+{
+  gamma_.set_requires_grad(true);
+}
+
+Tensor RMSNorm::forward(const Tensor& input) const {
+  int64_t dim = input.sizes().size() - 1; // get last dim
+  Tensor ms = mean(mul(input, input), dim, true); // mean of squares
+  Tensor denom = sqrt(add(ms, full(ms.sizes(), eps_))); // sqrt(ms + eps)
+  Tensor normed = div(input, denom);
+
+  // learnable scale
+  return mul(normed, gamma_);
+}
+
+std::vector<Tensor*> RMSNorm::parameters() {
+  return {&gamma_};
+}
+
 // Dropout layer
 // not needed because we are using torchlite for inference only, will keep here just in case
 Dropout::Dropout(float p) : p_(p) {}

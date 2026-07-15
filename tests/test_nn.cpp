@@ -58,6 +58,54 @@ void test_nn() {
   row0_var /= 4.0f;
   assert(is_close(row0_var, 1.0f, 1e-4));
 
+  // test RMSNorm: out = x / sqrt(mean(x^2) + eps) * gamma, no mean subtraction
+  {
+    tl::nn::RMSNorm rms({4});
+    tl::Tensor rms_in({2, 4});
+    rms_in.data()[0] = 1.0f; rms_in.data()[1] = 2.0f;
+    rms_in.data()[2] = 3.0f; rms_in.data()[3] = 4.0f;
+    rms_in.data()[4] = 10.0f; rms_in.data()[5] = 20.0f;
+    rms_in.data()[6] = 30.0f; rms_in.data()[7] = 40.0f;
+
+    tl::Tensor rms_out = rms.forward(rms_in);
+    assert(rms_out.sizes()[0] == 2 && rms_out.sizes()[1] == 4);
+
+    // row0: rms = sqrt((1+4+9+16)/4) = sqrt(7.5), out = x / sqrt(7.5)
+    assert(is_close(rms_out.data()[0], 0.3651f, 1e-4));
+    assert(is_close(rms_out.data()[1], 0.7303f, 1e-4));
+    assert(is_close(rms_out.data()[2], 1.0954f, 1e-4));
+    assert(is_close(rms_out.data()[3], 1.4606f, 1e-4));
+
+    // scale invariance: row1 = 10 * row0 normalizes to the same values
+    for (int i = 0; i < 4; ++i)
+      assert(is_close(rms_out.data()[4 + i], rms_out.data()[i], 1e-4));
+
+    // unlike LayerNorm, no centering: all-positive input stays all-positive
+    for (int i = 0; i < 8; ++i)
+      assert(rms_out.data()[i] > 0.0f);
+
+    assert(rms.parameters().size() == 1);
+  }
+
+  // test RMSNorm per-head gamma: gamma {heads, head_dim} broadcasts over leading dims
+  {
+    tl::nn::RMSNorm rms({2, 2}); // heads=2, head_dim=2
+    tl::Tensor g({2, 2});
+    for (int i = 0; i < 4; ++i)
+      g.data()[i] = (float)(i + 1); // gamma = [[1,2],[3,4]]
+    rms.set_gamma(g);
+
+    // constant input: x = 5 everywhere -> x / rms(x) = 1 -> output == gamma per position
+    tl::Tensor x({2, 2, 2}); // [T=2, heads=2, head_dim=2]
+    for (int i = 0; i < 8; ++i)
+      x.data()[i] = 5.0f;
+
+    tl::Tensor out = rms.forward(x);
+    for (int t = 0; t < 2; ++t)
+      for (int i = 0; i < 4; ++i)
+        assert(is_close(out.data()[t * 4 + i], (float)(i + 1), 1e-4));
+  }
+
   // test BatchNorm2d: each channel output should have mean ~0 and variance ~1
   // input (N=2, C=3, H=2, W=2): fill each channel with a distinct scale to ensure
   // channels normalize independently (channel 0 in [1..8], channel 1 in [10..80],
