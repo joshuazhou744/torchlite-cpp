@@ -1609,4 +1609,92 @@ Tensor sin(const Tensor& input) {
   return out;
 }
 
+// RoPE frequencies
+std::pair<Tensor, Tensor> rope_cos_sin(const Tensor& positions, int64_t dim, float theta) {
+  if (positions.sizes().size() != 1) {
+    throw std::invalid_argument("rope_cos_sin: positions must be 1D");
+  }
+  if (dim % 2 != 0) {
+    throw std::invalid_argument("rope_cos_sin: dim must be even");
+  }
+  int64_t len = positions.sizes()[0]; // T, sequence length
+  Tensor p = positions.contiguous();
+
+  Tensor cos_t({len, dim});
+  Tensor sin_t({len, dim});
+  for (int64_t k = 0; k < dim / 2; ++k) {
+    float inv_freq = std::pow(theta, -2.0f * k / dim);
+    for (int64_t t = 0; t < len; ++t) {
+      float angle = p.data()[t] * inv_freq;
+      float c = std::cos(angle);
+      float s = std::sin(angle);
+      // interleaved pairs: both channels (2k, 2k+1) share the pairs angle
+      cos_t.data()[t * dim + 2 * k] = c;
+      cos_t.data()[t * dim + 2 * k + 1] = c;
+      sin_t.data()[t * dim + 2 * k] = s;
+      sin_t.data()[t * dim + 2 * k + 1] = s;
+    }
+  }
+  return {cos_t, sin_t};
+}
+
+// axial 2D RoPE
+std::pair<Tensor, Tensor> rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float theta) {
+  if (dim % 4 != 0) {
+    throw std::invalid_argument("rope_cos_sin_2d: dim must be divisible by 4");
+  }
+  // half the channels per axis, each half gets own 1D RoPE
+  auto [cos_y, sin_y] = rope_cos_sin(arange(0, (int)h), dim / 2, theta); // [h, dim/2]
+  auto [cos_x, sin_x] = rope_cos_sin(arange(0, (int)w), dim / 2, theta); // [w, dim/2]
+
+  Tensor cos_t({h*w, dim});
+  Tensor sin_t({h*w, dim});
+  int64_t half = dim / 2;
+  // row-major flatten
+  for (int64_t r = 0; r < h; ++r) {
+    for (int64_t c = 0; c < w; ++c) {
+      int64_t token = r * w + c;
+      for (int64_t i = 0; i < half; ++i) {
+        cos_t.data()[token * dim + i] = cos_y.data()[r * half + i]; // first half
+        sin_t.data()[token * dim + i] = sin_y.data()[r * half + i];
+        cos_t.data()[token * dim + half + i] = cos_x.data()[c * half + i]; // second half
+        sin_t.data()[token * dim + half + i] = sin_x.data()[c * half + i];
+      }
+    }
+  }
+  return {cos_t, sin_t};
+}
+
+
+// apply RoPE angles to x
+Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin) {
+  int64_t nd = x.sizes().size();
+  if (nd < 2) {
+    throw std::invalid_argument("apply_rotary: x must be at least 2D [..., T, dim]");
+  }
+  int64_t T = x.sizes()[nd - 2];
+  int64_t dim = x.sizes()[nd - 1];
+  std::vector<int64_t> expected = {T, dim};
+  if (cos.sizes() != expected || sin.sizes() != expected) {
+    throw std::invalid_argument("apply_rotary: cos/sin must be [T, dim] to match x's last two dims");
+  }
+  if (dim % 2 != 0) {
+    throw std::invalid_argument("apply_rotary: dim must be even");
+  }
+
+  // rotate half
+  std::vector<int64_t> pair_shape(x.sizes().begin(), x.sizes().end() - 1);
+  pair_shape.push_back(dim / 2);
+  pair_shape.push_back(2);
+  Tensor xp = reshape(x, pair_shape);
+  int64_t last = (int64_t)pair_shape.size() - 1;
+  Tensor a = slice(xp, last, 0, 1); // [..., dim/2, 1]
+  Tensor b = slice(xp, last, 1, 2);
+  Tensor rot = reshape(cat({neg(b), a}, last), x.sizes());
+
+  // element-wise rotation: cos/sin broadcast over x's leading dims
+  // x * cos_table + rotate_half(x) * sin_table
+  return add(mul(x, cos), mul(rot, sin));
+}
+
 }

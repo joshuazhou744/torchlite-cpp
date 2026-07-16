@@ -2,6 +2,7 @@
 
 #include <tl/tensor.h>
 #include <cstdint>
+#include <utility>
 
 namespace tl {
 
@@ -95,5 +96,17 @@ Tensor cos(const Tensor& input);
 
 // sin: take sine of entire tensor
 Tensor sin(const Tensor& input);
+
+// RoPE frequencies for positions [0, len): returns {cos, sin}, each [len, dim]
+// interleaved pair: channels (2i, 2i+1) form one rotation pair
+std::pair<Tensor, Tensor> rope_cos_sin(const Tensor& positions, int64_t dim, float theta);
+
+// axial 2D RoPE over an h x w grid: first half of dim encodes row, second encodes col
+// returns {cos, sin}: [h*w, dim] each
+std::pair<Tensor, Tensor> rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float theta);
+
+// rotate x by RoPE angles: out = x * cos + rotate_half(x) * sin
+// x: [..., T, dim] with cos/sin [T, dim] broadcasting over leading dims
+Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin);
 
 }
