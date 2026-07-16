@@ -1697,4 +1697,26 @@ Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin) {
   return add(mul(x, cos), mul(rot, sin));
 }
 
+// repeat KV for GQA to expand shared KV heads into copies to match Q heads
+Tensor repeat_kv(const Tensor& x, int64_t n_rep) {
+  if (x.sizes().size() != 4) {
+    throw std::invalid_argument("repeat_kv: expected [N, kv_heads, T, head_dim]");
+  }
+  if (n_rep < 1) {
+    throw std::invalid_argument("repeat_kv: n_rep must be >= 1");
+  }
+  if (n_rep == 1) return x; // MHA passthrough, Q heads = KV heads
+
+  int64_t N = x.sizes()[0];
+  int64_t kv = x.sizes()[1];
+  int64_t T = x.sizes()[2];
+  int64_t hd = x.sizes()[3];
+
+  // stack n_rep copies at dim 2: [N, kv, n_rep, T, hd]
+  // then merge the two adjacent head dims so each kv head's copies sit consecutively
+  std::vector<Tensor> copies(n_rep, x);
+  Tensor out = stack(copies, 2);
+  return reshape(out, {N, kv * n_rep, T, hd});
+}
+
 }

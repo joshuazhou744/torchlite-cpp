@@ -459,7 +459,6 @@ void test_ops() {
     assert(flash.sizes()[0] == S && flash.sizes()[1] == d);
     for (int64_t i = 0; i < S * d; ++i)
       assert(is_close(flash.data()[i], ref.data()[i], 1e-4f));
-    std::cout << "  flash_attention forward ok\n";
   }
 
   // ---- flash attention backward: grads must match autograd through the reference ----
@@ -498,7 +497,6 @@ void test_ops() {
       assert(is_close(K.grad().data()[i], dK_ref[i], 1e-4f));
       assert(is_close(V.grad().data()[i], dV_ref[i], 1e-4f));
     }
-    std::cout << "  flash_attention backward ok\n";
   }
 
   // test cos: cos(0)=1, cos(pi)=-1, cos(pi/2)~0
@@ -523,6 +521,147 @@ void test_ops() {
     assert(is_close(s.data()[0], 0.0f, 1e-6f));
     assert(is_close(s.data()[1], 0.0f, 1e-5f));
     assert(is_close(s.data()[2], 1.0f, 1e-6f));
+  }
+
+  // test rope_cos_sin: exact table values, interleaved pairs
+  // positions [0,1,2], dim=4, theta=100 -> inv_freq = [1.0, 0.1]
+  {
+    tl::Tensor pos({3});
+    pos.data()[0] = 0.0f; pos.data()[1] = 1.0f; pos.data()[2] = 2.0f;
+    auto [c, s] = tl::rope_cos_sin(pos, 4, 100.0f);
+
+    assert(c.sizes()[0] == 3 && c.sizes()[1] == 4);
+    assert(s.sizes()[0] == 3 && s.sizes()[1] == 4);
+
+    // t=0: no rotation -> cos=1, sin=0 everywhere
+    for (int i = 0; i < 4; ++i) {
+      assert(is_close(c.data()[i], 1.0f, 1e-5f));
+      assert(is_close(s.data()[i], 0.0f, 1e-5f));
+    }
+    // t=1: pair 0 angle 1.0, pair 1 angle 0.1, each value doubled (interleaved)
+    assert(is_close(c.data()[4], 0.5403f, 1e-4f));
+    assert(is_close(c.data()[5], 0.5403f, 1e-4f));
+    assert(is_close(c.data()[6], 0.9950f, 1e-4f));
+    assert(is_close(c.data()[7], 0.9950f, 1e-4f));
+    assert(is_close(s.data()[4], 0.8415f, 1e-4f));
+    assert(is_close(s.data()[5], 0.8415f, 1e-4f));
+    assert(is_close(s.data()[6], 0.0998f, 1e-4f));
+    assert(is_close(s.data()[7], 0.0998f, 1e-4f));
+    // t=2: angles 2.0 and 0.2
+    assert(is_close(c.data()[8], -0.4161f, 1e-4f));
+    assert(is_close(s.data()[8], 0.9093f, 1e-4f));
+    assert(is_close(c.data()[10], 0.9801f, 1e-4f));
+    assert(is_close(s.data()[10], 0.1987f, 1e-4f));
+  }
+
+  // test apply_rotary: position 0 is identity, 90 degrees maps (a,b) -> (-b,a)
+  {
+    tl::Tensor pos({2});
+    pos.data()[0] = 0.0f;
+    pos.data()[1] = (float)M_PI / 2.0f; // dim=2 -> single pair, inv_freq=1 -> angle = position
+    auto [c, s] = tl::rope_cos_sin(pos, 2, 100.0f);
+
+    tl::Tensor x({2, 2});
+    x.data()[0] = 1.0f; x.data()[1] = 2.0f; // t=0
+    x.data()[2] = 3.0f; x.data()[3] = 4.0f; // t=1
+
+    tl::Tensor out = tl::apply_rotary(x, c, s);
+    // t=0: angle 0 -> unchanged
+    assert(is_close(out.data()[0], 1.0f, 1e-5f));
+    assert(is_close(out.data()[1], 2.0f, 1e-5f));
+    // t=1: quarter turn -> (3,4) -> (-4,3)
+    assert(is_close(out.data()[2], -4.0f, 1e-5f));
+    assert(is_close(out.data()[3], 3.0f, 1e-5f));
+  }
+
+  // test apply_rotary: rotation preserves each pair's norm (cos^2 + sin^2 = 1)
+  // and broadcasts over leading dims: x [N=2, T=3, dim=4] with tables [3, 4]
+  {
+    tl::Tensor pos({3});
+    pos.data()[0] = 0.0f; pos.data()[1] = 1.0f; pos.data()[2] = 2.0f;
+    auto [c, s] = tl::rope_cos_sin(pos, 4, 100.0f);
+
+    tl::Tensor x = tl::randn({2, 3, 4});
+    tl::Tensor out = tl::apply_rotary(x, c, s);
+    assert(out.sizes()[0] == 2 && out.sizes()[1] == 3 && out.sizes()[2] == 4);
+
+    for (int64_t i = 0; i < 2 * 3 * 4; i += 2) { // one iteration per pair
+      float in_norm = x.data()[i] * x.data()[i] + x.data()[i + 1] * x.data()[i + 1];
+      float out_norm = out.data()[i] * out.data()[i] + out.data()[i + 1] * out.data()[i + 1];
+      assert(is_close(in_norm, out_norm, 1e-4f));
+    }
+  }
+
+  // test rope_cos_sin_2d: h=2, w=3, dim=4 -> one pair per axis, angle = grid index
+  // token r*w+c: first half rotates with row r, second half with col c
+  {
+    auto [c, s] = tl::rope_cos_sin_2d(2, 3, 4, 100.0f);
+    assert(c.sizes()[0] == 6 && c.sizes()[1] == 4);
+
+    // token 0 = (r0, c0): no rotation anywhere
+    for (int i = 0; i < 4; ++i) {
+      assert(is_close(c.data()[i], 1.0f, 1e-5f));
+      assert(is_close(s.data()[i], 0.0f, 1e-5f));
+    }
+    // token 5 = (r1, c2): row half angle 1, col half angle 2
+    assert(is_close(c.data()[5 * 4 + 0], 0.5403f, 1e-4f));
+    assert(is_close(c.data()[5 * 4 + 2], -0.4161f, 1e-4f));
+    assert(is_close(s.data()[5 * 4 + 0], 0.8415f, 1e-4f));
+    assert(is_close(s.data()[5 * 4 + 2], 0.9093f, 1e-4f));
+    // tokens 1 = (r0, c1) and 3 = (r1, c0): same values, opposite halves
+    assert(is_close(c.data()[1 * 4 + 2], c.data()[3 * 4 + 0], 1e-5f));
+    assert(is_close(c.data()[1 * 4 + 0], c.data()[3 * 4 + 2], 1e-5f));
+  }
+
+  // test RoPE validation: wrong table length, odd dim, dim not divisible by 4
+  {
+    tl::Tensor pos({2});
+    pos.data()[0] = 0.0f; pos.data()[1] = 1.0f;
+    auto [c, s] = tl::rope_cos_sin(pos, 4, 100.0f);
+
+    bool threw = false;
+    try {
+      tl::Tensor x = tl::randn({2, 3, 4}); // T=3 but tables are [2, 4]
+      tl::apply_rotary(x, c, s);
+    } catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { tl::rope_cos_sin(pos, 3, 100.0f); } // odd dim
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { tl::rope_cos_sin_2d(2, 3, 6, 100.0f); } // dim % 4 != 0
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
+  // test repeat_kv: consecutive copies so Q head i maps to KV head i / n_rep
+  {
+    tl::Tensor x({1, 2, 1, 2}); // [N, kv_heads=2, T=1, head_dim=2]
+    x.data()[0] = 10.0f; x.data()[1] = 11.0f; // kv0
+    x.data()[2] = 20.0f; x.data()[3] = 21.0f; // kv1
+
+    tl::Tensor out = tl::repeat_kv(x, 2);
+    assert(out.sizes()[0] == 1 && out.sizes()[1] == 4);
+    assert(out.sizes()[2] == 1 && out.sizes()[3] == 2);
+
+    // heads 0,1 = copies of kv0; heads 2,3 = copies of kv1 (NOT interleaved)
+    float expected[8] = {10, 11, 10, 11, 20, 21, 20, 21};
+    for (int i = 0; i < 8; ++i)
+      assert(is_close(out.data()[i], expected[i]));
+
+    // n_rep = 1: MHA passthrough, values unchanged
+    tl::Tensor same = tl::repeat_kv(x, 1);
+    for (int i = 0; i < 4; ++i)
+      assert(is_close(same.data()[i], x.data()[i]));
+
+    // 3D input throws
+    bool threw = false;
+    try { tl::repeat_kv(tl::randn({2, 2, 2}), 2); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
   }
 
   std::cout << "ops tests passed" << std::endl;

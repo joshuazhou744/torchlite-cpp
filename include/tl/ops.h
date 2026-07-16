@@ -109,4 +109,8 @@ std::pair<Tensor, Tensor> rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, flo
 // x: [..., T, dim] with cos/sin [T, dim] broadcasting over leading dims
 Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin);
 
+// repeat each KV head n_rep times consecutively: [N, kv_heads, T, head_dim] -> [N, kv_heads * n_rep, T, head_dim]
+// Q head i attends KV head i / n_rep
+Tensor repeat_kv(const Tensor& x, int64_t n_rep);
+
 }
