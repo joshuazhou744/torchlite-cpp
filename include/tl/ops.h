@@ -97,7 +97,7 @@ Tensor cos(const Tensor& input);
 // sin: take sine of entire tensor
 Tensor sin(const Tensor& input);
 
-// RoPE frequencies for positions [0, len): returns {cos, sin}, each [len, dim]
+// RoPE frequencies (tables) for given positions: returns {cos, sin}, each [len, dim]
 // interleaved pair: channels (2i, 2i+1) form one rotation pair
 std::pair<Tensor, Tensor> rope_cos_sin(const Tensor& positions, int64_t dim, float theta);
 

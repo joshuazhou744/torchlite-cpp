@@ -429,6 +429,26 @@ void test_nn() {
   assert(is_close(maxpool_def_out.data()[0], 6.0f));
   assert(is_close(maxpool_def_out.data()[3], 16.0f));
 
+  // test GlobalAvgPool2d: (1,1,4,4) filled 1..16 -> (1,1), mean = 8.5
+  tl::nn::GlobalAvgPool2d gap;
+  tl::Tensor gap_out = gap.forward(pool_in);
+  assert(gap_out.sizes().size() == 2);
+  assert(gap_out.sizes()[0] == 1);
+  assert(gap_out.sizes()[1] == 1);
+  assert(is_close(gap_out.data()[0], 8.5f));
+
+  // test GlobalAvgPool2d: per-channel means on (1,2,2,2)
+  // ch0 = [1,2,3,4] -> 2.5, ch1 = [10,20,30,40] -> 25
+  tl::Tensor gap_in({1, 2, 2, 2});
+  for (int64_t i = 0; i < 4; ++i) gap_in.data()[i] = static_cast<float>(i + 1);
+  for (int64_t i = 0; i < 4; ++i) gap_in.data()[4 + i] = static_cast<float>((i + 1) * 10);
+  tl::Tensor gap_ch_out = gap.forward(gap_in);
+  assert(gap_ch_out.sizes().size() == 2);
+  assert(gap_ch_out.sizes()[0] == 1);
+  assert(gap_ch_out.sizes()[1] == 2);
+  assert(is_close(gap_ch_out.data()[0], 2.5f));
+  assert(is_close(gap_ch_out.data()[1], 25.0f));
+
   // test Upsample: scale_factor=2 on (1,1,2,2) input [[1,2],[3,4]]
   // each pixel repeated 2x in H and W -> (1,1,4,4)
   {

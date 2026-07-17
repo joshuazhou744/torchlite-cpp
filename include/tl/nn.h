@@ -321,6 +321,15 @@ private:
   int64_t kernel_size_, stride_, padding_;
 };
 
+// global average pool: (N, C, H, W) -> (N, C), mean over channel's grid
+class GlobalAvgPool2d: public Module {
+public:
+  Tensor forward(const Tensor& input) const override {
+    return mean(mean(input, 3), 2);
+  }
+  std::vector<Tensor*> parameters() override { return {}; }
+};
+
 // Upsample: nearest-neighbour spatial upsampling by integer scale factor
 class Upsample: public Module {
 public:
