@@ -31,6 +31,20 @@ void test_activation() {
   assert(is_close(res_gelu.data()[1], 0.8412f, 1e-4));
   assert(is_close(res_gelu.data()[2], -0.0036f, 1e-3));
 
+  // test gelu_exact: x * 0.5 * (1 + erf(x / sqrt(2)))
+  // tolerances are tight (1e-5) on purpose: exact vs tanh differ by ~1.5e-4 at x=1
+  // and ~4e-4 at x=-3, so this fails if gelu_exact accidentally uses the approximation
+  tl::Tensor ge({5});
+  ge.data()[0] = 0.0f; ge.data()[1] = 1.0f; ge.data()[2] = -1.0f;
+  ge.data()[3] = 2.0f; ge.data()[4] = -3.0f;
+
+  tl::Tensor res_ge = tl::gelu_exact(ge);
+  assert(is_close(res_ge.data()[0], 0.0f));
+  assert(is_close(res_ge.data()[1], 0.8413447f, 1e-5));
+  assert(is_close(res_ge.data()[2], -0.1586553f, 1e-5));
+  assert(is_close(res_ge.data()[3], 1.9544997f, 1e-5));
+  assert(is_close(res_ge.data()[4], -0.0040497f, 1e-5));
+
   // test SiLU: silu(x) = x * sigmoid(x)
   // silu(0) = 0 * 0.5 = 0
   // silu(1) = 1 * sigmoid(1) = 1 * 0.7311 = 0.7311

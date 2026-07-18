@@ -400,5 +400,23 @@ void test_autograd() {
     std::cout << "  SiLUBackward ok\n";
   }
 
+  // GeluExactBackward: d/dx[x*cdf(x)] = cdf(x) + x*pdf(x)
+  // at x=0: 0.5 + 0 = 0.5
+  // at x=1: 0.8413447 + 0.2419707 = 1.0833155
+  // at x=-2: 0.0227501 - 2*0.0539910 = -0.0852318
+  {
+    tl::Tensor x({3});
+    x.data()[0] = 0.0f; x.data()[1] = 1.0f; x.data()[2] = -2.0f;
+    x.set_requires_grad(true);
+
+    tl::Tensor y = tl::gelu_exact(x);
+    y.backward();
+
+    assert(close(x.grad().data()[0], 0.5f, 1e-5));
+    assert(close(x.grad().data()[1], 1.0833155f, 1e-5));
+    assert(close(x.grad().data()[2], -0.0852318f, 1e-5));
+    std::cout << "  GeluExactBackward ok\n";
+  }
+
   std::cout << "autograd tests passed.\n";
 }
