@@ -73,6 +73,29 @@ Tensor gelu(const Tensor& input) {
   return out;
 }
 
+
+// gelu exact
+Tensor gelu_exact(const Tensor& input) {
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  const int64_t n = a.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    float x = ap[i];
+    op[i] = 0.5f * x * (1.0f + std::erf(x * 0.70710678f));
+  }
+
+  if (input.requires_grad) {
+    if (auto fn = track<GeluExactBackward>(out, {&input})) {
+      fn->input_cache = input.contiguous();
+    }
+  }
+
+  return out;
+}
+
 // SiLU
 Tensor silu(const Tensor& input) {
   // autograd already handled by mul and sigmoid

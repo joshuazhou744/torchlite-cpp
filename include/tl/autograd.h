@@ -124,6 +124,12 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class GeluExactBackward: public GradFunction {
+public:
+  Tensor input_cache;
+  void backward(const Tensor& grad_output) override;
+};
+
 class SoftmaxBackward: public GradFunction {
 public:
   Tensor output_cache;

@@ -204,6 +204,27 @@ void GeluBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], result);
 }
 
+void GeluExactBackward::backward(const Tensor& grad_output) {
+  // gelu_exact(x) = x * cdf(x), cdf(x) = 0.5 * (1 + erf(x / sqrt(2)))
+  // product rule: d/dx = cdf(x) + x * pdf(x)
+  // pdf(x) = exp(-x^2 / 2) / sqrt(2*pi)
+  Tensor x = input_cache.contiguous();
+  Tensor g = grad_output.contiguous();
+  Tensor result(x.sizes());
+  const float* xp = x.data();
+  const float* gp = g.data();
+  float* rp = result.data();
+
+  const float inv_sqrt_2pi = 0.3989423f; // 1 / sqrt(2*pi)
+  for (int64_t i = 0; i < x.numel(); ++i) {
+    float xi = xp[i];
+    float cdf = 0.5f * (1.0f + std::erf(xi * 0.70710678f));
+    float pdf = inv_sqrt_2pi * std::exp(-0.5f * xi * xi);
+    rp[i] = gp[i] * (cdf + xi * pdf);
+  }
+  accumulate_grad(inputs[0], result);
+}
+
 void SoftmaxBackward::backward(const Tensor& grad_output) {
   Tensor out = output_cache.contiguous();
   Tensor g = grad_output.contiguous();

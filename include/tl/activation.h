@@ -10,6 +10,9 @@ Tensor relu(const Tensor& input);
 // GeLU activation function: out[i] = 0.5 * x * (1 + tanh(sqrt(2/n) * (x + 0.044715 * x^3)))
 Tensor gelu(const Tensor& input);
 
+// GeLU exact activation function: out[i] = x * 0.5 * (1 + erf(x / sqrt(2)))
+Tensor gelu_exact(const Tensor& input);
+
 // Sigmoid activation function: out[i] = 1 / (1 + exp(-x))
 Tensor sigmoid(const Tensor& input);
 
