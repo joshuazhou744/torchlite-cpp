@@ -288,6 +288,18 @@ public:
   std::vector<Tensor*> parameters() override { return {}; }
 };
 
+class GeLU: public Module {
+public:
+  Tensor forward(const Tensor& input) const override { return gelu(input); }
+  std::vector<Tensor*> parameters() override { return {}; }
+};
+
+class GeLUExact: public Module {
+public:
+  Tensor forward(const Tensor& input) const override { return gelu_exact(input); }
+  std::vector<Tensor*> parameters() override { return {}; }
+};
+
 class Flatten: public Module {
 public:
   Tensor forward(const Tensor& input) const override {

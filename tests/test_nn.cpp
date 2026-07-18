@@ -106,6 +106,31 @@ void test_nn() {
         assert(is_close(out.data()[t * 4 + i], (float)(i + 1), 1e-4));
   }
 
+  // test GeLU / GeLUExact modules: thin wrappers, must match their ops exactly
+  {
+    tl::Tensor x({4});
+    x.data()[0] = -2.0f; x.data()[1] = -0.5f; x.data()[2] = 0.5f; x.data()[3] = 2.0f;
+
+    tl::nn::GeLU g;
+    tl::nn::GeLUExact ge;
+    tl::Tensor out_g = g.forward(x);
+    tl::Tensor out_ge = ge.forward(x);
+    tl::Tensor ref_g = tl::gelu(x);
+    tl::Tensor ref_ge = tl::gelu_exact(x);
+    for (int i = 0; i < 4; ++i) {
+      assert(is_close(out_g.data()[i], ref_g.data()[i]));
+      assert(is_close(out_ge.data()[i], ref_ge.data()[i]));
+    }
+
+    // exact vs tanh differ slightly but measurably at x = -2 (~1e-4)
+    assert(std::abs(out_g.data()[0] - out_ge.data()[0]) > 1e-5f);
+    // gelu_exact(2) = 2 * cdf(2) = 1.9544997
+    assert(is_close(out_ge.data()[3], 1.9544997f, 1e-5));
+
+    assert(g.parameters().empty());
+    assert(ge.parameters().empty());
+  }
+
   // test BatchNorm2d: each channel output should have mean ~0 and variance ~1
   // input (N=2, C=3, H=2, W=2): fill each channel with a distinct scale to ensure
   // channels normalize independently (channel 0 in [1..8], channel 1 in [10..80],
