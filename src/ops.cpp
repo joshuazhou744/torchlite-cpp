@@ -1665,6 +1665,48 @@ std::pair<Tensor, Tensor> rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, flo
   return {cos_t, sin_t};
 }
 
+// DINOv3 2D RoPE tables
+std::pair<Tensor, Tensor> dino_rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float base) {
+  if (dim % 4 != 0) {
+    throw std::invalid_argument("dino_rope_cos_sin_2d: dim must be divisible by 4");
+  }
+  int64_t d4 = dim / 4;
+  int64_t half = dim / 2;
+
+  // geometric period ladder
+  std::vector<float> periods(d4);
+  for (int64_t k = 0; k < d4; ++k) {
+    periods[k] = std::pow(base, 2.0f * k / half);
+  }
+
+  Tensor cos_t({h * w, dim});
+  Tensor sin_t({h * w, dim});
+  const float two_pi = 2.0f * (float)M_PI;
+  for (int64_t r = 0; r < h; ++r) {
+    // (cx, cy) normalized to pixel center in [-1, 1]
+    float cy = 2.0f * (r + 0.5f) / h - 1.0f;
+    for (int64_t c = 0; c < w; ++c) {
+      float cx = 2.0f * (c + 0.5f) / w - 1.0f;
+      float* cp = cos_t.data() + (r * w + c) * dim;
+      float* sp = sin_t.data() + (r * w + c) * dim;
+      for (int64_t k = 0; k < d4; ++k) {
+        float ay = two_pi * cy / periods[k];
+        float ax = two_pi * cx / periods[k];
+        // layout [row | col] tiled twice: channels i and i + dim/2 share an angle
+        cp[k] = std::cos(ay);
+        cp[k + half] = cp[k];
+        cp[d4 + k] = std::cos(ax);
+        cp[d4 + k + half] = cp[d4 + k];
+        sp[k] = std::sin(ay);
+        sp[k + half] = sp[k];
+        sp[d4 + k] = std::sin(ax);
+        sp[d4 + k + half] = sp[d4 + k];
+      }
+    }
+  }
+  return {cos_t, sin_t};
+}
+
 
 // apply RoPE angles to x
 Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin) {
@@ -1694,6 +1736,31 @@ Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin) {
 
   // element-wise rotation: cos/sin broadcast over x's leading dims
   // x * cos_table + rotate_half(x) * sin_table
+  return add(mul(x, cos), mul(rot, sin));
+}
+
+// apple RoPE angles with half-split pairing
+Tensor apply_rotary_half(const Tensor& x, const Tensor& cos, const Tensor& sin) {
+  int64_t nd = x.sizes().size();
+  if (nd < 2) {
+    throw std::invalid_argument("apply_rotary_half: x must be at least 2D [..., T, dim]");
+  }
+  int64_t T = x.sizes()[nd - 2];
+  int64_t dim = x.sizes()[nd - 1];
+  std::vector<int64_t> expected = {T, dim};
+  if (cos.sizes() != expected || sin.sizes() != expected) {
+    throw std::invalid_argument("apply_rotary_half: cos/sin must be [T, dim] to match x's last two dims");
+  }
+  if (dim % 2 != 0) {
+    throw std::invalid_argument("apply_rotary_half: dim must be even");
+  }
+
+  // rotate half: [x1 | x2] -> [-x2 | x1]
+  int64_t last = nd - 1;
+  Tensor a = slice(x, last, 0, dim / 2);
+  Tensor b = slice(x, last, dim / 2, dim);
+  Tensor rot = cat({neg(b), a}, last);
+
   return add(mul(x, cos), mul(rot, sin));
 }
 

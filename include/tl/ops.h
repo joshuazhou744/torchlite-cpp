@@ -105,9 +105,16 @@ std::pair<Tensor, Tensor> rope_cos_sin(const Tensor& positions, int64_t dim, flo
 // returns {cos, sin}: [h*w, dim] each
 std::pair<Tensor, Tensor> rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float theta);
 
+// DINOv3 2D RoPE tables for h x w patch grid
+std::pair<Tensor, Tensor> dino_rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float base = 100.0f);
+
 // rotate x by RoPE angles: out = x * cos + rotate_half(x) * sin
 // x: [..., T, dim] with cos/sin [T, dim] broadcasting over leading dims
 Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin);
+
+// rotate with half-split pairing: x * cos + rotate_half(x) * sin
+// rotate_half: [x1 | x2] -> [-x2 | x1], x: [..., T, dim], cos/sin: [T, dim]
+Tensor apply_rotary_half(const Tensor& x, const Tensor& cos, const Tensor& sin);
 
 // repeat each KV head n_rep times consecutively: [N, kv_heads, T, head_dim] -> [N, kv_heads * n_rep, T, head_dim]
 // Q head i attends KV head i / n_rep

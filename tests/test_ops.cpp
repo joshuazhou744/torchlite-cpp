@@ -664,5 +664,88 @@ void test_ops() {
     assert(threw);
   }
 
+  // test dino_rope_cos_sin_2d: h=1, w=3, dim=8 -> periods {1, 10},
+  // row coord 0 (identity), col coords -2/3, 0, +2/3, layout [row|col] tiled twice
+  {
+    auto [c, s] = tl::dino_rope_cos_sin_2d(1, 3, 8, 100.0f);
+    assert(c.sizes()[0] == 3 && c.sizes()[1] == 8);
+    assert(s.sizes()[0] == 3 && s.sizes()[1] == 8);
+
+    // token 0: golden values from python reference of the DINO builder
+    float c0[8] = {1.0f, 1.0f, -0.5f, 0.9135455f, 1.0f, 1.0f, -0.5f, 0.9135455f};
+    float s0[8] = {0.0f, 0.0f, 0.8660254f, -0.4067366f, 0.0f, 0.0f, 0.8660254f, -0.4067366f};
+    for (int i = 0; i < 8; ++i) {
+      assert(is_close(c.data()[i], c0[i], 1e-5));
+      assert(is_close(s.data()[i], s0[i], 1e-5));
+    }
+
+    // token 1 sits at the center of both axes -> zero angles -> identity rotation
+    for (int i = 0; i < 8; ++i) {
+      assert(is_close(c.data()[8 + i], 1.0f, 1e-5));
+      assert(is_close(s.data()[8 + i], 0.0f, 1e-5));
+    }
+
+    // token 2 mirrors token 0 about the center: cos equal, sin negated
+    for (int i = 0; i < 8; ++i) {
+      assert(is_close(c.data()[16 + i], c0[i], 1e-5));
+      assert(is_close(s.data()[16 + i], -s0[i], 1e-5));
+    }
+
+    // tile(2) layout: channels i and i + dim/2 share an angle
+    for (int t = 0; t < 3; ++t) {
+      for (int i = 0; i < 4; ++i) {
+        assert(is_close(c.data()[t * 8 + i], c.data()[t * 8 + 4 + i]));
+        assert(is_close(s.data()[t * 8 + i], s.data()[t * 8 + 4 + i]));
+      }
+    }
+
+    // dim % 4 != 0 throws
+    bool threw = false;
+    try { tl::dino_rope_cos_sin_2d(2, 2, 6, 100.0f); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
+  // test apply_rotary_half: pairing is (i, i + dim/2), NOT interleaved
+  {
+    // needle 0 = channels (0,2) at angle pi/2, needle 1 = channels (1,3) at angle 0
+    tl::Tensor x({1, 4});
+    x.data()[0] = 1.0f; x.data()[1] = 2.0f; x.data()[2] = 3.0f; x.data()[3] = 4.0f;
+    tl::Tensor c({1, 4});
+    tl::Tensor s({1, 4});
+    c.data()[0] = 0.0f; c.data()[1] = 1.0f; c.data()[2] = 0.0f; c.data()[3] = 1.0f;
+    s.data()[0] = 1.0f; s.data()[1] = 0.0f; s.data()[2] = 1.0f; s.data()[3] = 0.0f;
+
+    tl::Tensor out = tl::apply_rotary_half(x, c, s);
+    // rot = [-x2|x1] = [-3,-4,1,2]; out = x*cos + rot*sin = [-3, 2, 1, 4]
+    // (interleaved rotate_half would give rot [-2,1,-4,3] -> out [-2, 2, -4, 4])
+    assert(is_close(out.data()[0], -3.0f));
+    assert(is_close(out.data()[1], 2.0f));
+    assert(is_close(out.data()[2], 1.0f));
+    assert(is_close(out.data()[3], 4.0f));
+  }
+
+  // apply_rotary_half preserves per-token norm (rotations are orthogonal),
+  // tables broadcast over leading dims
+  {
+    auto [c, s] = tl::dino_rope_cos_sin_2d(1, 3, 8, 100.0f); // [3, 8]
+    tl::Tensor x = tl::randn({2, 3, 8});
+    tl::Tensor out = tl::apply_rotary_half(x, c, s);
+    for (int64_t t = 0; t < 6; ++t) {
+      float n_in = 0.0f, n_out = 0.0f;
+      for (int64_t i = 0; i < 8; ++i) {
+        n_in += x.data()[t * 8 + i] * x.data()[t * 8 + i];
+        n_out += out.data()[t * 8 + i] * out.data()[t * 8 + i];
+      }
+      assert(is_close(std::sqrt(n_in), std::sqrt(n_out), 1e-4));
+    }
+
+    // mismatched table shape throws
+    bool threw = false;
+    try { tl::apply_rotary_half(x, c, tl::randn({3, 4})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
   std::cout << "ops tests passed" << std::endl;
 }
