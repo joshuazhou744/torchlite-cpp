@@ -24,7 +24,7 @@ private:
 class DinoBlock {
 public:
   DinoBlock(int64_t dim, int64_t num_heads, int64_t mlp_hidden);
-  Tensor forward(const Tensor& x, const Tensor& cos, const Tensor& sin int64_t prefix) const;
+  Tensor forward(const Tensor& x, const Tensor& cos, const Tensor& sin, int64_t prefix) const;
   std::vector<Tensor*> parameters();
 private:
   LayerNorm norm1_;
