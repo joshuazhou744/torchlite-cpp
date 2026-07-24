@@ -44,7 +44,7 @@ public:
   // x [N, 3, H, W]
   // returns feature maps [N, dim, H/p, W/p] after each block index in layers
   // each passed through the shared final norm, prefix tokens stripped
-  std::vector<Tensor> forward_features(const Tensor& x, const std::vector<int64_t>& layers) const;
+  std::vector<Tensor> forward(const Tensor& x, const std::vector<int64_t>& layers) const;
   std::vector<Tensor*> parameters();
 private:
   Conv2d patch_embed_; // 3 -> dim, k = s = patch

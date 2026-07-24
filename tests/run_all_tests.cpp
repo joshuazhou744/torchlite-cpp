@@ -10,6 +10,7 @@ void test_loss();
 void test_optim();
 void test_model_io();
 void test_diamond();
+void test_dino();
 
 int main() {
   std::cout << "Running all tests... \n" << std::endl;
@@ -24,6 +25,7 @@ int main() {
   test_optim();
   test_model_io();
   test_diamond();
+  test_dino();
 
   return 0;
 }
