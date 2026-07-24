@@ -1,4 +1,5 @@
 #include <tl/diamond.h>
+#include <tl/nn.h>
 #include <tl/activation.h>
 #include <tl/ops.h>
 #include <tl/factory.h>
@@ -27,16 +28,9 @@ ResidualBlock::ResidualBlock(int64_t in_channels, int64_t out_channels, int64_t 
 
 std::vector<Tensor*> ResidualBlock::parameters() {
   std::vector<Tensor*> params;
-  auto append = [&](auto& m) {
-    auto p = m.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  if (should_proj_) append(proj_);
-  append(agn1_);
-  append(conv1_);
-  append(agn2_);
-  append(conv2_);
-  if (has_attn_) append(attn_);
+  if (should_proj_) nn::append_params(params, proj_);
+  nn::append_params(params, agn1_, conv1_, agn2_, conv2_);
+  if (has_attn_) nn::append_params(params, attn_);
   return params;
 }
 
@@ -59,12 +53,7 @@ ResidualBlocks::ResidualBlocks(std::vector<int64_t> in_channels, std::vector<int
 }
 
 std::vector<Tensor*> ResidualBlocks::parameters() {
-  std::vector<Tensor*> params;
-  for (auto& b: blocks_) {
-    auto p = b.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  }
-  return params;
+  return nn::collect_params(blocks_);
 }
 
 std::pair<Tensor, std::vector<Tensor>> ResidualBlocks::forward(const Tensor& x, const Tensor& cond, const std::vector<Tensor>& to_cat) const {
@@ -131,17 +120,7 @@ UNet::UNet(int64_t cond_dim, std::vector<int64_t> depths, std::vector<int64_t> c
 }
 
 std::vector<Tensor*> UNet::parameters() {
-  std::vector<Tensor*> params;
-  auto append = [&](auto& m) {
-    auto p = m.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  for (auto& b: d_blocks_) append(b);
-  for (auto& b: u_blocks_) append(b);
-  append(mid_blocks_);
-  for (auto& d: downsamples_) append(d);
-  for (auto& u: upsamples_) append(u);
-  return params;
+  return nn::collect_params(d_blocks_, u_blocks_, mid_blocks_, downsamples_, upsamples_);
 }
 
 
@@ -202,19 +181,7 @@ InnerModel::InnerModel(InnerModelConfig cfg)
 }
 
 std::vector<Tensor*> InnerModel::parameters() {
-  std::vector<Tensor*> params;
-  auto append = [&](auto& m) {
-    auto p = m.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  append(act_emb_);
-  append(cond_proj1_);
-  append(cond_proj2_);
-  append(conv_in_);
-  append(unet_);
-  append(norm_out_);
-  append(conv_out_);
-  return params;
+  return nn::collect_params(act_emb_, cond_proj1_, cond_proj2_, conv_in_, unet_, norm_out_, conv_out_);
 }
 
 std::vector<Tensor*> InnerModel::buffers() {

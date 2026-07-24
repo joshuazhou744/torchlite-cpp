@@ -84,9 +84,8 @@ Tensor Linear::forward(const Tensor& input) const {
 
 // get Linear layer parameters
 std::vector<Tensor*> Linear::parameters() {
-  std::vector<Tensor*> params = {&weight_};
-  if (use_bias_) params.push_back(&bias_);
-  return params;
+  if (use_bias_) return {&weight_, &bias_};
+  return {&weight_};
 }
 
 // Convolution 2D
@@ -106,9 +105,8 @@ Conv2d::Conv2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, i
 
 // get Conv2d layer parameters
 std::vector<Tensor*> Conv2d::parameters() {
-  std::vector<Tensor*> params = {&weight_};
-  if (use_bias_) params.push_back(&bias_);
-  return params;
+  if (use_bias_) return {&weight_, &bias_};
+  return {&weight_};
 }
 
 Tensor Conv2d::forward(const Tensor& input) const {
@@ -226,12 +224,7 @@ void MultiHeadAttention::set_training(bool t) {
 
 // get MSA head parameters (aggregate of all linear layer params)
 std::vector<Tensor*> MultiHeadAttention::parameters() {
-  std::vector<Tensor*> params;
-  for (auto* sub: {&q_proj_, &k_proj_, &v_proj_, &out_proj_}) {
-    auto sp = sub->parameters();
-    params.insert(params.end(), sp.begin(), sp.end());
-  }
-  return params;
+  return collect_params(q_proj_, k_proj_, v_proj_, out_proj_);
 }
 
 Tensor MultiHeadAttention::forward(const Tensor& input, const Tensor& mask) const {
@@ -334,12 +327,7 @@ SelfAttention2d::SelfAttention2d(int64_t in_channels, int64_t num_heads)
 }
 
 std::vector<Tensor*> SelfAttention2d::parameters() {
-  auto p = norm_.parameters();
-  auto q = qkv_proj_.parameters();
-  auto o = out_proj_.parameters();
-  p.insert(p.end(), q.begin(), q.end());
-  p.insert(p.end(), o.begin(), o.end());
-  return p;
+  return collect_params(norm_, qkv_proj_, out_proj_);
 }
 
 Tensor SelfAttention2d::forward(const Tensor& input) const {
@@ -399,17 +387,7 @@ void TransformerEncoderLayer::set_training(bool t) {
 
 // get Transformer encoder layer parameters (aggregate of msa, norm and feed-forward layers)
 std::vector<Tensor*> TransformerEncoderLayer::parameters() {
-  std::vector<Tensor*> params;
-  auto append = [&](auto& layer) {
-    auto p = layer.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  append(msa_);
-  append(norm1_);
-  append(norm2_);
-  append(ff1_);
-  append(ff2_);
-  return params;
+  return collect_params(msa_, norm1_, norm2_, ff1_, ff2_);
 }
 
 Tensor TransformerEncoderLayer::forward(const Tensor& input) const {
@@ -449,12 +427,7 @@ Tensor TransformerEncoder::forward(const Tensor& input) const {
 
 // get Transformer encoder parameters (aggregate of all layers)
 std::vector<Tensor*> TransformerEncoder::parameters() {
-  std::vector<Tensor*> params;
-  for (auto& sub: layers_) {
-    auto sp = sub.parameters();
-    params.insert(params.end(), sp.begin(), sp.end());
-  }
-  return params;
+  return collect_params(layers_);
 }
 
 // Transformer decoder layer (cross-attention)
@@ -481,19 +454,7 @@ void TransformerDecoderLayer::set_training(bool t) {
 }
 
 std::vector<Tensor*> TransformerDecoderLayer::parameters() {
-  std::vector<Tensor*> params;
-  auto append = [&](auto& layer) {
-    auto p = layer.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  append(self_attn_);
-  append(cross_attn_);
-  append(norm1_);
-  append(norm2_);
-  append(norm3_);
-  append(ff1_);
-  append(ff2_);
-  return params;
+  return collect_params(self_attn_, cross_attn_, norm1_, norm2_, norm3_, ff1_, ff2_);
 }
 
 Tensor TransformerDecoderLayer::forward(const Tensor& input, const Tensor& encoder_output, const Tensor& tgt_mask) const {
@@ -531,12 +492,7 @@ void TransformerDecoder::set_training(bool t) {
 }
 
 std::vector<Tensor*> TransformerDecoder::parameters() {
-  std::vector<Tensor*> params;
-  for (auto& layer: layers_) {
-    auto p = layer.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  }
-  return params;
+  return collect_params(layers_);
 }
 
 Tensor TransformerDecoder::forward(const Tensor& input, const Tensor& encoder_output, const Tensor& tgt_mask) const {
@@ -573,17 +529,7 @@ void CausalTransformerLayer::set_training(bool t) {
 }
 
 std::vector<Tensor*> CausalTransformerLayer::parameters() {
-  std::vector<Tensor*> params;
-  auto append = [&](auto& layer) {
-    auto p = layer.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  append(self_attn_);
-  append(norm1_);
-  append(norm2_);
-  append(ff1_);
-  append(ff2_);
-  return params;
+  return collect_params(self_attn_, norm1_, norm2_, ff1_, ff2_);
 }
 
 Tensor CausalTransformerLayer::forward(const Tensor& input, const Tensor& mask) const {
@@ -612,12 +558,7 @@ void CausalTransformer::set_training(bool t) {
 }
 
 std::vector<Tensor*> CausalTransformer::parameters() {
-  std::vector<Tensor*> params;
-  for (auto& layer: layers_) {
-    auto p = layer.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  }
-  return params;
+  return collect_params(layers_);
 }
 
 Tensor CausalTransformer::forward(const Tensor& input, const Tensor& mask) const {
@@ -881,12 +822,7 @@ TimestepEmbedding::TimestepEmbedding(int64_t dim, int64_t out_dim)
 }
 
 std::vector<Tensor*> TimestepEmbedding::parameters() {
-  std::vector<Tensor*> params;
-  auto p1 = fc1_.parameters();
-  auto p2 = fc2_.parameters();
-  params.insert(params.end(), p1.begin(), p1.end());
-  params.insert(params.end(), p2.begin(), p2.end());
-  return params;
+  return collect_params(fc1_, fc2_);
 }
 
 Tensor TimestepEmbedding::forward(const Tensor& sigma) const {
@@ -996,16 +932,7 @@ std::pair<Tensor, Tensor> LSTMCell::forward(const Tensor& x_t, const Tensor& h_p
 }
 
 std::vector<Tensor*> LSTMCell::parameters() {
-  std::vector<Tensor*> params;
-  auto append = [&](auto& layer) {
-    auto p = layer.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  append(forget_linear_);
-  append(input_linear_);
-  append(candidate_linear_);
-  append(output_linear_);
-  return params;
+  return collect_params(forget_linear_, input_linear_, candidate_linear_, output_linear_);
 }
 
 // LSTM

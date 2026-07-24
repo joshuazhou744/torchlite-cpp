@@ -18,6 +18,40 @@ public:
   virtual void set_training(bool) {}
 };
 
+namespace detail {
+// raw parameter tensor
+inline void append_one(std::vector<Tensor*>& dst, Tensor& t) {
+  dst.push_back(&t);
+}
+
+// anything exposing .parameters(), include Module subclasses and plain classes
+template <typename M>
+inline void append_one(std::vector<Tensor*>& dst, M& m) {
+  auto p = m.parameters();
+  dst.insert(dst.end(), p.begin(), p.end());
+}
+
+// container of sub-modules
+template <typename T>
+inline void append_one(std::vector<Tensor*>& dst, std::vector<T>& v) {
+  for (auto& e: v) append_one(dst, e);
+}
+}
+
+// append parameters onto existing list
+template <typename... Ms>
+void append_params(std::vector<Tensor*>& dst, Ms&... ms) {
+  (detail::append_one(dst, ms), ...);
+}
+
+// collect parameters in argument order
+template <typename... Ms>
+std::vector<Tensor*> collect_params(Ms&... ms) {
+  std::vector<Tensor*> out;
+  append_params(out, ms...);
+  return out;
+}
+
 // Sequential: chain of modules
 class Sequential: public Module {
 public:

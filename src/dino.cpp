@@ -1,6 +1,7 @@
 #include <tl/dino.h>
 #include <tl/tensor.h>
 #include <tl/factory.h>
+#include <tl/nn.h>
 
 #include <cmath>
 #include <stdexcept>
@@ -64,12 +65,7 @@ Tensor DinoAttention::forward(const Tensor& x, const Tensor& cos, const Tensor& 
 }
 
 std::vector<Tensor*> DinoAttention::parameters() {
-  std::vector<Tensor*> params;
-  for (auto* sub: {&qkv_, &proj_}) {
-    auto sp = sub->parameters();
-    params.insert(params.end(), sp.begin(), sp.end());
-  }
-  return params;
+  return nn::collect_params(qkv_, proj_);
 }
 
 // DinoBlock
@@ -97,19 +93,7 @@ Tensor DinoBlock::forward(const Tensor& x, const Tensor& cos, const Tensor& sin,
 
 
 std::vector<Tensor*> DinoBlock::parameters() {
-  std::vector<Tensor*> params;
-  auto append = [&](auto& layer) {
-    auto p = layer.parameters();
-    params.insert(params.end(), p.begin(), p.end());
-  };
-  append(norm1_);
-  append(attn_);
-  params.push_back(&ls1_);
-  append(norm2_);
-  append(fc1_);
-  append(fc2_);
-  params.push_back(&ls2_);
-  return params;
+  return nn::collect_params(norm1_, attn_, ls1_, norm2_, fc1_, fc2_, ls2_);
 }
 
 }
