@@ -4,7 +4,7 @@
 #include <cstdint>
 
 namespace tl {
-namespace nn {
+namespace dino {
 
 // DINOv3 attention: fused qkv, per-head RoPE (half-split) on patch tokens only
 class DinoAttention {
@@ -13,8 +13,8 @@ public:
   Tensor forward(const Tensor& x, const Tensor& cos, const Tensor& sin, int64_t prefix) const;
   std::vector<Tensor*> parameters();
 private:
-  Linear qkv_; // dim -> 3*dim
-  Linear proj_; // dim -> dim
+  nn::Linear qkv_; // dim -> 3*dim
+  nn::Linear proj_; // dim -> dim
   int64_t num_heads_;
   int64_t head_dim_;
 };
@@ -27,13 +27,13 @@ public:
   Tensor forward(const Tensor& x, const Tensor& cos, const Tensor& sin, int64_t prefix) const;
   std::vector<Tensor*> parameters();
 private:
-  LayerNorm norm1_;
+  nn::LayerNorm norm1_;
   DinoAttention attn_;
   Tensor ls1_; // element-wise scalar / LayerScale gamma
-  LayerNorm norm2_;
-  Linear fc1_; // dim -> mlp_hidden
-  GeLUExact act_;
-  Linear fc2_; // mlp_hidden -> dim
+  nn::LayerNorm norm2_;
+  nn::Linear fc1_; // dim -> mlp_hidden
+  nn::GeLUExact act_;
+  nn::Linear fc2_; // mlp_hidden -> dim
   Tensor ls2_;
 };
 
@@ -47,11 +47,11 @@ public:
   std::vector<Tensor> forward(const Tensor& x, const std::vector<int64_t>& layers) const;
   std::vector<Tensor*> parameters();
 private:
-  Conv2d patch_embed_; // 3 -> dim, k = s = patch
+  nn::Conv2d patch_embed_; // 3 -> dim, k = s = patch
   Tensor cls_token_; // [1, 1, dim]
   Tensor storage_tokens_; // [1, n_storage, dim]
   std::vector<DinoBlock> blocks_;
-  LayerNorm norm_; // shared final norm
+  nn::LayerNorm norm_; // shared final norm
   int64_t patch_size_;
   int64_t num_heads_;
 };

@@ -12,7 +12,7 @@ void test_dino() {
   {
     // --- shape + finiteness, two configs ---
     // config A: dim=16, 4 heads (head_dim=4), 2x3 patch grid, prefix=2 -> T=8
-    tl::nn::DinoAttention attn(16, 4);
+    tl::dino::DinoAttention attn(16, 4);
     auto [cosA, sinA] = tl::dino_rope_cos_sin_2d(2, 3, 4); // [6, 4] (h*w patch tokens, head_dim)
     tl::Tensor xA = tl::randn({2, 8, 16});                 // [N=2, T=2+6, dim=16]
     tl::Tensor outA = attn.forward(xA, cosA, sinA, 2);
@@ -23,7 +23,7 @@ void test_dino() {
     for (int i = 0; i < outA.numel(); ++i) CHECK(std::isfinite(outA.data()[i]));
 
     // config B: dim=32, 8 heads (head_dim=4), 3x2 grid, prefix=1 -> T=7
-    tl::nn::DinoAttention attnB(32, 8);
+    tl::dino::DinoAttention attnB(32, 8);
     auto [cosB, sinB] = tl::dino_rope_cos_sin_2d(3, 2, 4); // [6, 4]
     tl::Tensor xB = tl::randn({1, 7, 32});
     tl::Tensor outB = attnB.forward(xB, cosB, sinB, 1);
@@ -37,7 +37,7 @@ void test_dino() {
     // ANY prefix. Same module + input must give identical output whether prefix
     // skips 0 or 3 leading tokens. Catches wrong cat dim / off-by-one slice bounds:
     // if the prefix split/rejoin were wrong, the two runs would diverge.
-    tl::nn::DinoAttention attnC(16, 4);
+    tl::dino::DinoAttention attnC(16, 4);
     tl::Tensor xC = tl::randn({2, 8, 16});
     // prefix=0: table spans all T=8 tokens
     tl::Tensor id_cos0 = tl::ones({8, 4}), id_sin0 = tl::zeros({8, 4});
@@ -65,11 +65,68 @@ void test_dino() {
     // --- dim not divisible by num_heads must throw ---
     bool threw = false;
     try {
-      tl::nn::DinoAttention bad(16, 3);
+      tl::dino::DinoAttention bad(16, 3);
     } catch (const std::invalid_argument&) {
       threw = true;
     }
     CHECK(threw);
+  }
+
+  // test DinoBlock
+  {
+    // dim=16, 4 heads (head_dim=4), mlp_hidden=64, 2x3 grid, prefix=2 -> T=8
+    tl::dino::DinoBlock blk(16, 4, 64);
+    auto [cos, sin] = tl::dino_rope_cos_sin_2d(2, 3, 4); // [6, 4]
+    tl::Tensor x = tl::randn({2, 8, 16});
+
+    // --- shape preserved + finite ---
+    tl::Tensor out = blk.forward(x, cos, sin, 2);
+    CHECK(out.sizes().size() == 3);
+    CHECK(out.sizes()[0] == 2);
+    CHECK(out.sizes()[1] == 8);
+    CHECK(out.sizes()[2] == 16);
+    for (int i = 0; i < out.numel(); ++i) CHECK(std::isfinite(out.data()[i]));
+
+    // --- parameter count and ordering ---
+    // norm1(2) + attn(4) + ls1(1) + norm2(2) + fc1(2) + fc2(2) + ls2(1) = 14
+    // ordering matters: the checkpoint loader maps weights by this index order.
+    auto bp = blk.parameters();
+    CHECK(bp.size() == 14);
+    tl::Tensor* ls1 = bp[6];
+    tl::Tensor* ls2 = bp[13];
+    // LayerScale is the only param initialized to 1e-5, so this confirms we
+    // grabbed the right slots (and that gamma init didn't drift).
+    CHECK(ls1->sizes().size() == 1 && ls1->sizes()[0] == 16);
+    CHECK(ls2->sizes().size() == 1 && ls2->sizes()[0] == 16);
+    CHECK(is_close(ls1->data()[0], 1e-5f, 1e-9f));
+    CHECK(is_close(ls2->data()[0], 1e-5f, 1e-9f));
+
+    // --- at init the block is near-identity (CaiT LayerScale) ---
+    // both branches are scaled by 1e-5, so out ~= x. this catches a missing
+    // residual add (out would be ~0) or LayerScale applied to the wrong side.
+    for (int i = 0; i < out.numel(); ++i)
+      CHECK(is_close(out.data()[i], x.data()[i], 1e-3f));
+
+    // --- ls = 0 makes the block exactly the identity ---
+    // sharper version of the above: with both gammas zeroed, every branch
+    // contributes exactly 0 and the residual must pass x through untouched.
+    for (int i = 0; i < ls1->numel(); ++i) ls1->data()[i] = 0.0f;
+    for (int i = 0; i < ls2->numel(); ++i) ls2->data()[i] = 0.0f;
+    tl::Tensor out_zero = blk.forward(x, cos, sin, 2);
+    for (int i = 0; i < out_zero.numel(); ++i)
+      CHECK(is_close(out_zero.data()[i], x.data()[i], 1e-6f));
+
+    // --- ls = 1 makes the branches actually contribute ---
+    // guards against the degenerate case where the block is identity for the
+    // wrong reason (e.g. branches silently producing zeros).
+    for (int i = 0; i < ls1->numel(); ++i) ls1->data()[i] = 1.0f;
+    for (int i = 0; i < ls2->numel(); ++i) ls2->data()[i] = 1.0f;
+    tl::Tensor out_one = blk.forward(x, cos, sin, 2);
+    bool differs = false;
+    for (int i = 0; i < out_one.numel(); ++i)
+      if (!is_close(out_one.data()[i], x.data()[i], 1e-3f)) { differs = true; break; }
+    CHECK(differs);
+    for (int i = 0; i < out_one.numel(); ++i) CHECK(std::isfinite(out_one.data()[i]));
   }
 
   std::cout << "dino tests passed" << std::endl;

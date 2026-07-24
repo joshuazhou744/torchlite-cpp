@@ -1,10 +1,12 @@
 #include <tl/dino.h>
 #include <tl/tensor.h>
+#include <tl/factory.h>
+
 #include <cmath>
 #include <stdexcept>
 
 namespace tl {
-namespace nn {
+namespace dino {
 
 // DinoAttention
 DinoAttention::DinoAttention(int64_t dim, int64_t num_heads)
@@ -67,6 +69,46 @@ std::vector<Tensor*> DinoAttention::parameters() {
     auto sp = sub->parameters();
     params.insert(params.end(), sp.begin(), sp.end());
   }
+  return params;
+}
+
+// DinoBlock
+DinoBlock::DinoBlock(int64_t dim, int64_t num_heads, int64_t mlp_hidden)
+  : norm1_(dim, 1e-5f),
+    attn_(dim, num_heads),
+    ls1_(full({dim}, 1e-5f)),
+    norm2_(dim, 1e-5f),
+    fc1_(dim, mlp_hidden),
+    fc2_(mlp_hidden, dim),
+    ls2_(full({dim}, 1e-5f))
+{}
+
+// x = x + ls1 * attn(norm1(x))
+// x = x + ls2 * mlp(norm2(x))
+Tensor DinoBlock::forward(const Tensor& x, const Tensor& cos, const Tensor& sin, int64_t prefix) const {
+  // attention
+  Tensor a = attn_.forward(norm1_.forward(x), cos, sin, prefix);
+  Tensor h = add(x, mul(a, ls1_));
+
+  // mlp: dim -> mlp_hidden -> GeLU -> dim
+  Tensor m = fc2_.forward(act_.forward(fc1_.forward(norm2_.forward(h))));
+  return add(h, mul(m, ls2_));
+}
+
+
+std::vector<Tensor*> DinoBlock::parameters() {
+  std::vector<Tensor*> params;
+  auto append = [&](auto& layer) {
+    auto p = layer.parameters();
+    params.insert(params.end(), p.begin(), p.end());
+  };
+  append(norm1_);
+  append(attn_);
+  params.push_back(&ls1_);
+  append(norm2_);
+  append(fc1_);
+  append(fc2_);
+  params.push_back(&ls2_);
   return params;
 }
 
