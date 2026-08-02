@@ -41,13 +41,17 @@ def write_golden_cfg(path, batch, height, width, layers):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", required=True, help="output prefix, e.g. models/vits16")
     ap.add_argument("--batch", type=int, default=1)
     ap.add_argument("--height", type=int, default=112)
     ap.add_argument("--width", type=int, default=160)
     ap.add_argument("--layers", type=int, nargs="+", default=None)
     ap.add_argument("--dino-root", default="~/repos/dinov3")
     args = ap.parse_args()
+
+    if os.path.isdir(args.out):
+        raise ValueError(f"--out {args.out} is a directory; pass a file prefix like {args.out}/vits16")
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
 
     sd = load_ckpt(args.ckpt)
     cfg = infer_config(sd)

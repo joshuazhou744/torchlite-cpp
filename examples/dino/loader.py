@@ -106,14 +106,16 @@ def write_cfg(path, cfg):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True, help="DINOv3 .pth checkpoint")
-    ap.add_argument("--out", required=True, help="output file path")
+    ap.add_argument("--out", required=True, help="output prefix, e.g. models/vits16")
     args = ap.parse_args()
+
+    if os.path.isdir(args.out):
+        raise ValueError(f"--out {args.out} is a directory; pass a file prefix like {args.out}/vits16")
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
 
     sd = load_ckpt(args.ckpt)
     cfg = infer_config(sd)
     print("inferred config:", cfg)
-
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
 
     params = extract_params(sd, cfg)
     write_tlmd(f"{args.out}.tl", params)

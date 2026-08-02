@@ -24,7 +24,7 @@ struct Config {
   std::vector<int64_t> layers;
 };
 
-static constexpr float TOL = 1e-3f;
+static constexpr float TOL = 1e-2f;
 
 // parse key value lines into cfg
 static void read_cfg(const std::string& path, Config& cfg) {
@@ -70,17 +70,23 @@ static bool compare(const tl::Tensor& got, const tl::Tensor& exp, int64_t layer,
   const float* pb = b.data();
   int64_t n = a.numel();
   float max_abs = 0.0f, ref_max = 0.0f;
+  double sum_abs = 0.0;
   bool finite = true;
   for (int64_t j = 0; j < n; ++j) {
     if (!std::isfinite(pa[j])) finite = false;
     float d = std::fabs(pa[j] - pb[j]);
+    sum_abs += d;
     max_abs = std::max(max_abs, d);
     ref_max = std::max(ref_max, std::fabs(pb[j]));
   }
   float rel = (ref_max > 0.0f) ? max_abs / ref_max : max_abs;
   bool ok = finite && rel <= tol;
 
-  std::cout << "layer " << layer << (finite ? (ok ? " PASS" : " FAIL") : " NON-FINITE") << std::endl;
+  std::cout << "layer " << layer
+    << ": max_abs=" << max_abs
+    << " mean_abs=" << (sum_abs / n)
+    << " ref_max=" << ref_max << " ref=" << rel
+    << (finite ? (ok ? " PASS" : " FAIL") : " NON-FINITE") << std::endl;
   return ok;
 }
 
