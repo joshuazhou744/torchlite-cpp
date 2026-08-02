@@ -97,6 +97,9 @@ if(BUILD_EXAMPLES)
     examples/diamond/sampler.cpp
   )
   target_link_libraries(diamond_main PRIVATE torchlite)
+
+  add_executable(dino_golden examples/dino/main.cpp)
+  target_link_libraries(dino_golden PRIVATE torchlite)
 endif()
 
 if(BUILD_BENCH)
