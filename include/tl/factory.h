@@ -39,4 +39,7 @@ inline Tensor ones_like(const Tensor& t) { return ones(t.sizes()); }
 // full tensor like
 inline Tensor full_like(const Tensor& t, float value) { return full(t.sizes(), value); }
 
+// triangular mask
+Tensor tri_mask(int64_t rows, int64_t cols, int64_t diagonal = 0, bool lower = true);
+
 }

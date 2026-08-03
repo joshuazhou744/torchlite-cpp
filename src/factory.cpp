@@ -86,4 +86,21 @@ Tensor load(const std::string& path, const std::vector<int64_t>& sizes) {
   return out;
 }
 
+// [rows, cols] triangle mask (upper or lower)
+Tensor tri_mask(int64_t rows, int64_t cols, int64_t diagonal, bool lower) {
+  if (rows <= 0 || cols <= 0) {
+    throw std::invalid_argument("tri_mask: rows and cols must be positive");
+  }
+
+  Tensor out({rows, cols});
+  float *op = out.data();
+  for (int64_t r = 0; r < rows; ++r) {
+    for (int64_t c = 0; c < cols; ++c) {
+      bool keep = lower ? (c <= r + diagonal) : (c >= r + diagonal);
+      op[r * cols + c] = keep ? 1.0f : 0.0f;
+    }
+  }
+  return out;
+}
+
 }
