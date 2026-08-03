@@ -1349,6 +1349,46 @@ Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value) {
   return out;
 }
 
+// shared triangular masking: keep_lower differentiates tril/triu
+static Tensor tri_impl(const Tensor& input, int64_t diagonal, bool keep_lower) {
+  const auto& sizes = input.sizes();
+  int64_t nd = (int64_t)sizes.size();
+  if (nd < 2) {
+    throw std::invalid_argument("tril/triu: input must be at least 2D");
+  }
+
+  Tensor a = input.contiguous();
+  Tensor out(a.sizes());
+  const float* ap = a.data();
+  float* op = out.data();
+
+  int64_t rows = sizes[nd - 2];
+  int64_t cols = sizes[nd - 1];
+  int64_t batch = a.numel() / (rows * cols); // same mask to all leading slices
+
+  for (int64_t b = 0; b < batch; ++b) {
+    const float* in_mat = ap + b * rows * cols;
+    float* out_mat = op + b * rows * cols;
+    for (int64_t r = 0; r < rows; ++r) {
+      for (int64_t c = 0; c < cols; ++c) {
+        bool keep = keep_lower ? (c <= r + diagonal) : (c >= r + diagonal);
+        out_mat[r * cols + c] = keep ? in_mat[r * cols + c] : 0.0f;
+      }
+    }
+  }
+  return out;
+}
+
+// zero upper triangle
+Tensor tril(const Tensor& input, int64_t diagonal) {
+   return tri_impl(input, diagonal, true);
+}
+
+// zero lower triangle
+Tensor triu(const Tensor& input, int64_t diagonal) {
+   return tri_impl(input, diagonal, false);
+}
+
 // convolution of a filter tensor over an input tensor using im2col (unroll inputs into one big matmul)
 Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride, int64_t padding, int64_t groups) {
   const int64_t N = input.sizes()[0];

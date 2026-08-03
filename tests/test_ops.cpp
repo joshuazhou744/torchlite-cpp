@@ -747,5 +747,136 @@ void test_ops() {
     assert(threw);
   }
 
+  // test tril/triu: triangular masking over the last two dims
+  {
+    // helper: compare a [rows, cols] slice against an expected row-major pattern
+    auto check_mat = [](const tl::Tensor& t, int64_t offset, int64_t n,
+                        const std::vector<float>& want) {
+      assert(n == (int64_t)want.size());
+      for (int64_t i = 0; i < n; ++i) assert(is_close(t.data()[offset + i], want[i]));
+    };
+
+    tl::Tensor ones4 = tl::ones({4, 4});
+
+    // tril(diagonal=0): keep col <= row
+    check_mat(tl::tril(ones4), 0, 16, {
+      1, 0, 0, 0,
+      1, 1, 0, 0,
+      1, 1, 1, 0,
+      1, 1, 1, 1});
+
+    // triu(diagonal=0): keep col >= row
+    check_mat(tl::triu(ones4), 0, 16, {
+      1, 1, 1, 1,
+      0, 1, 1, 1,
+      0, 0, 1, 1,
+      0, 0, 0, 1});
+
+    // diagonal shifts the boundary right/up: each unit gains or loses one per row
+    check_mat(tl::tril(ones4, 1), 0, 16, {
+      1, 1, 0, 0,
+      1, 1, 1, 0,
+      1, 1, 1, 1,
+      1, 1, 1, 1});
+    check_mat(tl::tril(ones4, -1), 0, 16, {
+      0, 0, 0, 0,
+      1, 0, 0, 0,
+      1, 1, 0, 0,
+      1, 1, 1, 0});
+    check_mat(tl::triu(ones4, 1), 0, 16, {
+      0, 1, 1, 1,
+      0, 0, 1, 1,
+      0, 0, 0, 1,
+      0, 0, 0, 0});
+
+    // kept values pass through unchanged, not replaced by 1
+    // (an all-ones input cannot catch transposed row/col indexing)
+    tl::Tensor vals({3, 3});
+    for (int64_t i = 0; i < 9; ++i) vals.data()[i] = (float)(i + 1);
+    check_mat(tl::tril(vals), 0, 9, {
+      1, 0, 0,
+      4, 5, 0,
+      7, 8, 9});
+    check_mat(tl::triu(vals), 0, 9, {
+      1, 2, 3,
+      0, 5, 6,
+      0, 0, 9});
+
+    // non-square: the KV-cache case, q_len=2 queries against k_len=5 keys.
+    // MIRA passes shift = k_len - q_len so the newest query sees every key.
+    tl::Tensor ones25 = tl::ones({2, 5});
+    tl::Tensor nonsq = tl::tril(ones25, 3);
+    assert(nonsq.sizes()[0] == 2 && nonsq.sizes()[1] == 5);
+    check_mat(nonsq, 0, 10, {
+      1, 1, 1, 1, 0,
+      1, 1, 1, 1, 1});
+
+    // batched: the same mask applies to every leading slice, values preserved per slice
+    tl::Tensor batched({2, 3, 3});
+    for (int64_t i = 0; i < 18; ++i) batched.data()[i] = (float)(i + 1);
+    tl::Tensor bt = tl::tril(batched);
+    assert(bt.sizes()[0] == 2 && bt.sizes()[1] == 3 && bt.sizes()[2] == 3);
+    check_mat(bt, 0, 9, {1, 0, 0, 4, 5, 0, 7, 8, 9});
+    check_mat(bt, 9, 9, {10, 0, 0, 13, 14, 0, 16, 17, 18});
+
+    // 4D [N, H, T, T] works too: attention scores shape, one mask per head
+    tl::Tensor scores = tl::ones({2, 3, 4, 4});
+    tl::Tensor masked = tl::tril(scores);
+    assert(masked.sizes().size() == 4 && masked.sizes()[3] == 4);
+    for (int64_t m = 0; m < 6; ++m) { // every [4,4] matrix gets the identical mask
+      check_mat(masked, m * 16, 16, {
+        1, 0, 0, 0,
+        1, 1, 0, 0,
+        1, 1, 1, 0,
+        1, 1, 1, 1});
+    }
+
+    // tril(x, 0) and triu(x, 1) partition x exactly: every element lands in one or
+    // the other, so summing them reconstructs the input. catches boundary off-by-one.
+    tl::Tensor rnd = tl::randn({5, 5});
+    tl::Tensor recombined = tl::add(tl::tril(rnd, 0), tl::triu(rnd, 1));
+    for (int64_t i = 0; i < 25; ++i) assert(is_close(recombined.data()[i], rnd.data()[i]));
+
+    // saturating diagonals: far negative zeros everything, far positive is a no-op
+    tl::Tensor all_zero = tl::tril(ones4, -4);
+    for (int64_t i = 0; i < 16; ++i) assert(all_zero.data()[i] == 0.0f);
+    tl::Tensor untouched = tl::tril(ones4, 3);
+    for (int64_t i = 0; i < 16; ++i) assert(untouched.data()[i] == 1.0f);
+
+    // non-contiguous input is contiguified before masking, so the mask applies to
+    // the transposed *view*, not the underlying buffer order
+    tl::Tensor m23({2, 3});
+    for (int64_t i = 0; i < 6; ++i) m23.data()[i] = (float)(i + 1); // [[1,2,3],[4,5,6]]
+    tl::Tensor t32 = tl::transpose(m23, 0, 1);                      // [[1,4],[2,5],[3,6]]
+    check_mat(tl::tril(t32), 0, 6, {
+      1, 0,
+      2, 5,
+      3, 6});
+
+    // MIRA's sliding-window causal mask: tril sets the newest edge, triu the oldest.
+    // q_len = k_len = 5, context = 3 -> each token sees itself plus 2 previous.
+    tl::Tensor ones5 = tl::ones({5, 5});
+    int64_t shift = 0;    // k_len - q_len
+    int64_t context = 3;
+    tl::Tensor band = tl::triu(tl::tril(ones5, shift), shift - context + 1);
+    check_mat(band, 0, 25, {
+      1, 0, 0, 0, 0,
+      1, 1, 0, 0, 0,
+      1, 1, 1, 0, 0,
+      0, 1, 1, 1, 0,
+      0, 0, 1, 1, 1});
+
+    // 1D input throws (needs at least [rows, cols])
+    bool threw = false;
+    try { tl::tril(tl::ones({4})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { tl::triu(tl::ones({4})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
   std::cout << "ops tests passed" << std::endl;
 }
