@@ -1,5 +1,9 @@
 #include <iostream>
 
+#ifdef NDEBUG
+#error "run_tests must be built with assertions enabled (-UNDEBUG in CMakeLists.txt)"
+#endif
+
 void test_tensor();
 void test_ops();
 void test_activation();

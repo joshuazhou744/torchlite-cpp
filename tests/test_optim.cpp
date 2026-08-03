@@ -11,7 +11,6 @@ static bool close(float a, float b, float e = 1e-4f) {
 }
 
 void test_optim() {
-  std::cout << "Running optim tests...\n";
 
   // zero_grad: clears each param's gradient
   {
@@ -22,7 +21,6 @@ void test_optim() {
 
     tl::zero_grad({&w});
     assert(w.grad().empty());
-    std::cout << "  zero_grad ok\n";
   }
 
   // SGD: w' = w - lr * grad
@@ -38,7 +36,6 @@ void test_optim() {
     // w = [1 - 0.5*0.1, 2 - 0.5*0.2] = [0.95, 1.9]
     assert(close(w.data()[0], 0.95f));
     assert(close(w.data()[1], 1.9f));
-    std::cout << "  SGD basic ok\n";
   }
 
   // SGD with weight_decay: g' = g + wd*w; w' = w - lr * g'
@@ -55,7 +52,6 @@ void test_optim() {
     // w  = [1 - 0.5*0.2, 2 - 0.5*0.4]  = [0.9, 1.8]
     assert(close(w.data()[0], 0.9f));
     assert(close(w.data()[1], 1.8f));
-    std::cout << "  SGD weight_decay ok\n";
   }
 
   // SGD with momentum: v = momentum*v + g, w = w - lr*v
@@ -79,7 +75,6 @@ void test_optim() {
     opt.step();
     assert(close(w.data()[0], 0.855f));
     assert(close(w.data()[1], 1.71f));
-    std::cout << "  SGD momentum ok\n";
   }
 
   // Adam: per-param adaptive lr
@@ -100,7 +95,6 @@ void test_optim() {
     // w[1] ≈ 2 - 0.01 * (-0.2 / 0.2) = 2.01
     assert(close(w.data()[0], 0.99f, 1e-3f));
     assert(close(w.data()[1], 2.01f, 1e-3f));
-    std::cout << "  Adam ok\n";
   }
 
   // AdamW: decoupled weight decay
@@ -119,7 +113,6 @@ void test_optim() {
     // w[1] ≈ 2 - 0.01 * (-1.0 + 0.1*2) = 2 - 0.01*(-0.8) = 2.008
     assert(close(w.data()[0], 0.989f, 1e-3f));
     assert(close(w.data()[1], 2.008f, 1e-3f));
-    std::cout << "  AdamW ok\n";
   }
 
   // multi-step convergence sanity check: SGD on f(w) = (w - 5)^2
@@ -136,8 +129,7 @@ void test_optim() {
       opt.step();
     }
     assert(close(w.data()[0], 5.0f, 1e-2f));
-    std::cout << "  SGD convergence ok\n";
   }
 
-  std::cout << "Optim tests passed.\n";
+  std::cout << "optim tests passed.\n";
 }

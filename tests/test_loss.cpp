@@ -11,7 +11,6 @@ static bool close(float a, float b, float e = 1e-4f) {
 
 
 void test_loss() {
-  std::cout << "Running loss tests...\n";
 
   // mse: mean((pred - target)^2)
   {
@@ -24,7 +23,6 @@ void test_loss() {
     // diffs: [1,2,3,4], sq: [1,4,9,16], mean = 30/4 = 7.5
     tl::Tensor loss = tl::mse_loss(pred, target);
     assert(close(loss.data()[0], 7.5f));
-    std::cout << "  mse ok\n";
   }
 
   // mse backward: d/d(pred) = 2*(pred-target)/N
@@ -43,7 +41,6 @@ target.data()[i] = 1.0f; }
     assert(close(pred.grad().data()[1], 1.0f));
     assert(close(pred.grad().data()[2], 1.5f));
     assert(close(pred.grad().data()[3], 2.0f));
-    std::cout << "  mse backward ok\n";
   }
 
   // mae: mean(|pred - target|)
@@ -57,7 +54,6 @@ target.data()[i] = 1.0f; }
     // diffs: [2,-2,1,-1], abs: [2,2,1,1], mean = 6/4 = 1.5
     tl::Tensor loss = tl::mae_loss(pred, target);
     assert(close(loss.data()[0], 1.5f));
-    std::cout << "  mae ok\n";
   }
 
   // mae backward: d/d(pred) = sign(pred-target)/N
@@ -77,7 +73,6 @@ target.data()[i] = 1.0f; }
     assert(close(pred.grad().data()[1], -0.25f));
     assert(close(pred.grad().data()[2],  0.25f));
     assert(close(pred.grad().data()[3], -0.25f));
-    std::cout << "  mae backward ok\n";
   }
 
   // bce: -mean(y*log(x) + (1-y)*log(1-x))
@@ -89,7 +84,6 @@ target.data()[i] = 1.0f; }
     // -mean(1*log(0.9) + 0 + 0 + 1*log(0.9)) = -log(0.9) ≈ 0.10536
     tl::Tensor loss = tl::bce_loss(pred, target);
     assert(close(loss.data()[0], -std::log(0.9f), 1e-3f));
-    std::cout << "  bce ok\n";
   }
 
   // nll: -mean(log_probs[i][y[i]])
@@ -105,7 +99,6 @@ target.data()[i] = 1.0f; }
     std::vector<int> targets = {0, 2};
     tl::Tensor loss = tl::nll_loss(log_probs, targets);
     assert(close(loss.data()[0], 1.75f));
-    std::cout << "  nll ok\n";
   }
 
   // cross_entropy: softmax + log + nll
@@ -117,7 +110,6 @@ target.data()[i] = 1.0f; }
     std::vector<int> targets = {0, 1};
     tl::Tensor loss = tl::cross_entropy_loss(logits, targets);
     assert(close(loss.data()[0], -std::log(1.0f / 3.0f), 1e-3f));
-    std::cout << "  cross_entropy ok\n";
   }
 
   // l2_reg: lambda * sum(w^2)
@@ -127,7 +119,6 @@ target.data()[i] = 1.0f; }
     // sum(w^2) = 1+4+9 = 14, * 0.5 = 7.0
     tl::Tensor reg = tl::l2_reg({&w}, 0.5f);
     assert(close(reg.data()[0], 7.0f));
-    std::cout << "  l2_reg ok\n";
   }
 
   // l1_reg: lambda * sum(|w|)
@@ -137,7 +128,6 @@ target.data()[i] = 1.0f; }
     // sum(|w|) = 1+2+3 = 6, * 0.5 = 3.0
     tl::Tensor reg = tl::l1_reg({&w}, 0.5f);
     assert(close(reg.data()[0], 3.0f));
-    std::cout << "  l1_reg ok\n";
   }
 
 

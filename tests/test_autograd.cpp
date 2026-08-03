@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <tl/tensor.h>
 #include <tl/ops.h>
 #include <tl/activation.h>
@@ -11,7 +12,6 @@ static bool close(float a, float b, float e = 1e-4f) {
 }
 
 void test_autograd() {
-  std::cout << "Running autograd tests...\n";
 
   // AddBackward: gradient passes through unchanged to both inputs
   {
@@ -28,7 +28,6 @@ void test_autograd() {
       assert(close(a.grad().data()[i], 1.0f));
       assert(close(b.grad().data()[i], 1.0f));
     }
-    std::cout << "  AddBackward ok\n";
   }
 
   // SubBackward: +grad for a, -grad for b
@@ -47,7 +46,6 @@ void test_autograd() {
     assert(close(a.grad().data()[1], 1.0f));
     assert(close(b.grad().data()[0], -1.0f));
     assert(close(b.grad().data()[1], -1.0f));
-    std::cout << "  SubBackward ok\n";
   }
 
   // MulBackward: d/da = b, d/db = a
@@ -66,7 +64,6 @@ void test_autograd() {
     assert(close(a.grad().data()[1], 5.0f));  // = b[1]
     assert(close(b.grad().data()[0], 2.0f));  // = a[0]
     assert(close(b.grad().data()[1], 3.0f));  // = a[1]
-    std::cout << "  MulBackward ok\n";
   }
 
   // ReluBackward: grad passes where input > 0, else 0
@@ -83,7 +80,6 @@ void test_autograd() {
     assert(close(x.grad().data()[1], 0.0f));
     assert(close(x.grad().data()[2], 1.0f));
     assert(close(x.grad().data()[3], 1.0f));
-    std::cout << "  ReluBackward ok\n";
   }
 
   // SigmoidBackward: d/dx = sig(x) * (1 - sig(x))
@@ -96,7 +92,6 @@ void test_autograd() {
     y.backward();
 
     assert(close(x.grad().data()[0], 0.25f));
-    std::cout << "  SigmoidBackward ok\n";
   }
 
   // TanhBackward: d/dx = 1 - tanh(x)^2
@@ -111,7 +106,6 @@ void test_autograd() {
 
     assert(close(x.grad().data()[0], 1.0f));
     assert(close(x.grad().data()[1], 0.42f));
-    std::cout << "  TanhBackward ok\n";
   }
 
   // Chain rule: y = (a * b) + c, d/da = b, d/db = a, d/dc = 1
@@ -136,7 +130,6 @@ void test_autograd() {
     assert(close(b.grad().data()[1], 3.0f));  // a[1]
     assert(close(c.grad().data()[0], 1.0f));
     assert(close(c.grad().data()[1], 1.0f));
-    std::cout << "  Chain rule (mul+add) ok\n";
   }
 
   // Gradient accumulation: same tensor used twice
@@ -152,7 +145,6 @@ void test_autograd() {
     // each branch contributes a to the grad, accumulated => 2a
     assert(close(a.grad().data()[0], 6.0f));  // 2 * 3
     assert(close(a.grad().data()[1], 8.0f));  // 2 * 4
-    std::cout << "  Gradient accumulation (a * a) ok\n";
   }
 
   // MatmulBackward (Level 1 — pure 2D): dA = grad @ B^T, dB = A^T @ grad
@@ -194,7 +186,6 @@ void test_autograd() {
     assert(close(B.grad().data()[4], 9.0f));
     assert(close(B.grad().data()[5], 9.0f));
 
-    std::cout << "  MatmulBackward (2D) ok\n";
 
     // MatmulBackward Level 2 — batched (B, M, K) @ (B, K, N)
     // A = ones(2, 2, 3), B = ones(2, 3, 2), seed grad = ones(2, 2, 2)
@@ -212,7 +203,6 @@ void test_autograd() {
 
       for (int i = 0; i < 12; ++i) assert(close(A.grad().data()[i], 2.0f));
       for (int i = 0; i < 12; ++i) assert(close(B.grad().data()[i], 2.0f));
-      std::cout << "  MatmulBackward (batched 3D) ok\n";
     }
 
     // MatmulBackward Level 3 — broadcast batch: (B, M, K) @ (K, N)
@@ -232,7 +222,6 @@ void test_autograd() {
 
       for (int i = 0; i < 24; ++i) assert(close(A.grad().data()[i], 2.0f));
       for (int i = 0; i < 8;  ++i) assert(close(B.grad().data()[i], 6.0f));
-      std::cout << "  MatmulBackward (broadcast batch) ok\n";
     }
 
      // MatmulBackward Level 4a — (K,) @ (K, N): vector-matrix
@@ -251,7 +240,6 @@ void test_autograd() {
       for (int i = 0; i < 4; ++i) assert(close(a.grad().data()[i], 3.0f));
       // dB = a^T @ grad -> (4,1)@(1,3) = (4,3), each entry = 1
       for (int i = 0; i < 12; ++i) assert(close(B.grad().data()[i], 1.0f));
-      std::cout << "  MatmulBackward (vec @ mat) ok\n";
     }
 
     // MatmulBackward Level 4b — (M, K) @ (K,): matrix-vector
@@ -270,7 +258,6 @@ void test_autograd() {
       for (int i = 0; i < 12; ++i) assert(close(A.grad().data()[i], 1.0f));
       // db = A^T @ grad -> (4,3)@(3,) -> (4,) each = sum of col of A = 3
       for (int i = 0; i < 4; ++i) assert(close(b.grad().data()[i], 3.0f));
-      std::cout << "  MatmulBackward (mat @ vec) ok\n";
     }
 
 
@@ -310,7 +297,6 @@ void test_autograd() {
     for (int i = 0; i < 4; ++i) assert(close(w.grad().data()[i], expected_gw[i]));
 
     assert(close(b.grad().data()[0], 4.0f));
-    std::cout << "  Conv2dBackward ok\n";
   }
 
   // Conv2dBackward with groups=2 (depthwise): backward must keep channels isolated.
@@ -345,7 +331,6 @@ void test_autograd() {
       assert(close(w.grad().data()[i],     xvals[i]));      // filter0 grad == ch0 values
       assert(close(w.grad().data()[i + 4], xvals[i + 4]));  // filter1 grad == ch1 values
     }
-    std::cout << "  Conv2dBackward (depthwise/groups) ok\n";
   }
 
   // MaxPool2dBackward: gradient routes only to the argmax of each window
@@ -365,7 +350,6 @@ void test_autograd() {
       bool is_winner = (i == 5 || i == 7 || i == 13 || i == 15);
       assert(close(x.grad().data()[i], is_winner ? 1.0f : 0.0f));
     }
-    std::cout << "  MaxPool2dBackward ok\n";
   }
 
   // AvgPool2dBackward: gradient spreads uniformly (grad / k^2) over each window
@@ -382,7 +366,6 @@ void test_autograd() {
     for (int i = 0; i < 16; ++i) {
       assert(close(x.grad().data()[i], 0.25f));
     }
-    std::cout << "  AvgPool2dBackward ok\n";
   }
 
   // SiLUBackward: d/dx[x*sigmoid(x)] = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
@@ -397,7 +380,6 @@ void test_autograd() {
     y.backward();
 
     assert(close(x.grad().data()[0], 0.9277f, 1e-3));
-    std::cout << "  SiLUBackward ok\n";
   }
 
   // GeluExactBackward: d/dx[x*cdf(x)] = cdf(x) + x*pdf(x)
@@ -415,7 +397,171 @@ void test_autograd() {
     assert(close(x.grad().data()[0], 0.5f, 1e-5));
     assert(close(x.grad().data()[1], 1.0833155f, 1e-5));
     assert(close(x.grad().data()[2], -0.0852318f, 1e-5));
-    std::cout << "  GeluExactBackward ok\n";
+  }
+
+  // WhereBackward: gradient reaches only the branch that was selected
+  {
+    tl::Tensor a({3});
+    tl::Tensor b({3});
+    for (int i = 0; i < 3; ++i) { a.data()[i] = i + 1.0f; b.data()[i] = (i + 1) * 10.0f; }
+    a.set_requires_grad(true);
+    b.set_requires_grad(true);
+
+    tl::Tensor cond({3});
+    cond.data()[0] = 1.0f; cond.data()[1] = 0.0f; cond.data()[2] = 1.0f;
+
+    tl::Tensor y = tl::where(cond, a, b); // [1, 20, 3]
+    assert(close(y.data()[0], 1.0f));
+    assert(close(y.data()[1], 20.0f));
+    assert(close(y.data()[2], 3.0f));
+
+    y.backward(); // seeds grad = [1, 1, 1]
+
+    // the two masks are complementary: every position feeds exactly one input
+    assert(close(a.grad().data()[0], 1.0f));
+    assert(close(a.grad().data()[1], 0.0f));
+    assert(close(a.grad().data()[2], 1.0f));
+    assert(close(b.grad().data()[0], 0.0f));
+    assert(close(b.grad().data()[1], 1.0f));
+    assert(close(b.grad().data()[2], 0.0f));
+  }
+
+  // WhereBackward: cond is never registered as an input, so it gets no gradient
+  // (the output is piecewise constant in cond, so its derivative is genuinely zero)
+  {
+    tl::Tensor a = tl::ones({2});
+    tl::Tensor b = tl::zeros({2});
+    a.set_requires_grad(true);
+
+    tl::Tensor cond({2});
+    cond.data()[0] = 1.0f; cond.data()[1] = 0.0f;
+    cond.set_requires_grad(true); // deliberately ignored
+
+    tl::Tensor y = tl::where(cond, a, b);
+    y.backward();
+
+    assert(cond.grad().empty()); // nothing accumulated into it
+    assert(close(a.grad().data()[0], 1.0f));
+    assert(close(a.grad().data()[1], 0.0f));
+  }
+
+  // WhereBackward: broadcast inputs need their gradient summed back down (sum_to)
+  {
+    // cond [2,1] selects row 0 from a, row 1 from b; a is [1,3] so it broadcasts
+    tl::Tensor a({1, 3});
+    for (int i = 0; i < 3; ++i) a.data()[i] = i + 1.0f;
+    tl::Tensor b = tl::zeros({2, 3});
+    a.set_requires_grad(true);
+    b.set_requires_grad(true);
+
+    tl::Tensor cond({2, 1});
+    cond.data()[0] = 1.0f; cond.data()[1] = 0.0f;
+
+    tl::Tensor y = tl::where(cond, a, b);
+    assert(y.sizes()[0] == 2 && y.sizes()[1] == 3);
+    y.backward();
+
+    // only row 0 came from a, so each of a's elements receives exactly one unit
+    assert(a.grad().sizes()[0] == 1 && a.grad().sizes()[1] == 3);
+    for (int i = 0; i < 3; ++i) assert(close(a.grad().data()[i], 1.0f));
+    // row 0 of b was not selected, row 1 was
+    for (int i = 0; i < 3; ++i) assert(close(b.grad().data()[i], 0.0f));
+    for (int i = 3; i < 6; ++i) assert(close(b.grad().data()[i], 1.0f));
+  }
+
+  // WhereBackward: when a broadcast element feeds several outputs, its gradient is
+  // the SUM of those contributions, not just one of them
+  {
+    tl::Tensor a({1, 3});
+    for (int i = 0; i < 3; ++i) a.data()[i] = i + 1.0f;
+    a.set_requires_grad(true);
+    tl::Tensor b = tl::zeros({2, 3});
+
+    tl::Tensor y = tl::where(tl::ones({2, 3}), a, b); // both rows come from a
+    y.backward();
+
+    // each element of a fed 2 output positions -> gradient 2, not 1
+    for (int i = 0; i < 3; ++i) assert(close(a.grad().data()[i], 2.0f));
+  }
+
+  // masked_fill inherits where's backward: no gradient through filled positions
+  {
+    tl::Tensor x({4});
+    for (int i = 0; i < 4; ++i) x.data()[i] = i + 1.0f;
+    x.set_requires_grad(true);
+
+    tl::Tensor keep({4});
+    keep.data()[0] = 1.0f; keep.data()[1] = 0.0f;
+    keep.data()[2] = 1.0f; keep.data()[3] = 0.0f;
+
+    tl::Tensor y = tl::masked_fill(x, keep, -99.0f);
+    y.backward();
+
+    assert(close(x.grad().data()[0], 1.0f));
+    assert(close(x.grad().data()[1], 0.0f)); // filled -> x had no influence here
+    assert(close(x.grad().data()[2], 1.0f));
+    assert(close(x.grad().data()[3], 0.0f));
+  }
+
+  // masked_fill with -inf (the attention case): the fill value must not contaminate
+  // the gradient, since where selects rather than multiplies
+  {
+    tl::Tensor scores = tl::zeros({2, 2});
+    scores.set_requires_grad(true);
+    tl::Tensor causal = tl::tri_mask(2, 2); // [[1,0],[1,1]]
+
+    tl::Tensor y = tl::masked_fill(scores, causal, -std::numeric_limits<float>::infinity());
+    y.backward();
+
+    for (int i = 0; i < 4; ++i) assert(!std::isnan(scores.grad().data()[i]));
+    assert(close(scores.grad().data()[0], 1.0f));
+    assert(close(scores.grad().data()[1], 0.0f));
+    assert(close(scores.grad().data()[2], 1.0f));
+    assert(close(scores.grad().data()[3], 1.0f));
+  }
+
+  // tril/triu get their gradient from MulBackward, since they are mul by a 0/1 mask.
+  // d(x * mask)/dx = mask, so the incoming gradient comes back masked the same way.
+  {
+    tl::Tensor x({3, 3});
+    for (int i = 0; i < 9; ++i) x.data()[i] = i + 1.0f;
+    x.set_requires_grad(true);
+
+    tl::Tensor y = tl::tril(x);
+    y.backward();
+
+    const float want[9] = {1, 0, 0,
+                           1, 1, 0,
+                           1, 1, 1};
+    for (int i = 0; i < 9; ++i) assert(close(x.grad().data()[i], want[i]));
+  }
+
+  {
+    tl::Tensor x({3, 3});
+    for (int i = 0; i < 9; ++i) x.data()[i] = i + 1.0f;
+    x.set_requires_grad(true);
+
+    tl::Tensor y = tl::triu(x, 1); // strictly above the diagonal
+    y.backward();
+
+    const float want[9] = {0, 1, 1,
+                           0, 0, 1,
+                           0, 0, 0};
+    for (int i = 0; i < 9; ++i) assert(close(x.grad().data()[i], want[i]));
+  }
+
+  // gradient flows through a batched tril, where the [T,T] mask broadcasts
+  {
+    tl::Tensor x = tl::ones({2, 2, 2});
+    x.set_requires_grad(true);
+
+    tl::Tensor y = tl::tril(x);
+    y.backward();
+
+    // each [2,2] plane gets the same mask: [[1,0],[1,1]]
+    const float want[8] = {1, 0, 1, 1,
+                           1, 0, 1, 1};
+    for (int i = 0; i < 8; ++i) assert(close(x.grad().data()[i], want[i]));
   }
 
   std::cout << "autograd tests passed.\n";
