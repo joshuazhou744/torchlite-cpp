@@ -80,5 +80,13 @@ void test_factory() {
   assert(ls3.sizes()[0] == 1);
   assert(is_close(ls3.data()[0], 3.0f));
 
+  // test like functions
+  tl::Tensor ref = tl::randn({2, 3, 4});
+  assert(tl::zeros_like(ref).sizes() == ref.sizes());
+  assert(tl::zeros_like(ref).data()[5] == 0.0f);
+  assert(tl::ones_like(ref).data()[5] == 1.0f);
+  assert(is_close(tl::full_like(ref, -2.5f).data()[5], -2.5f));
+  assert(tl::randn_like(ref).sizes() == ref.sizes());
+
   std::cout << "factory tests passed" << std::endl;
 }

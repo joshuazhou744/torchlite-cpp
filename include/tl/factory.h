@@ -27,4 +27,16 @@ Tensor linspace(float start, float end, int64_t steps);
 // load PyTorch tensors
 Tensor load(const std::string& path, const std::vector<int64_t>& sizes);
 
+// random tensor like
+inline Tensor randn_like(const Tensor& t) { return randn(t.sizes()); }
+
+// zeros tensor like
+inline Tensor zeros_like(const Tensor& t) { return zeros(t.sizes()); }
+
+// ones tensor like
+inline Tensor ones_like(const Tensor& t) { return ones(t.sizes()); }
+
+// full tensor like
+inline Tensor full_like(const Tensor& t, float value) { return full(t.sizes(), value); }
+
 }
