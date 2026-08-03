@@ -4,6 +4,7 @@
 #include <tl/nn.h>
 #include <tl/factory.h>
 #include <cassert>
+#include <limits>
 #include "test_utils.h"
 
 void test_ops() {
@@ -264,6 +265,101 @@ void test_ops() {
   assert(clamp_out.data()[1] == 0.0f);
   assert(clamp_out.data()[2] == 5.0f);
   assert(clamp_out.data()[3] == 7.0f);
+
+  // test where: elementwise select, cond != 0 picks a, otherwise b
+  {
+    tl::Tensor cond({4});
+    cond.data()[0] = 1.0f; cond.data()[1] = 0.0f;
+    cond.data()[2] = 1.0f; cond.data()[3] = 0.0f;
+    tl::Tensor wa({4});
+    wa.data()[0] = 10.0f; wa.data()[1] = 20.0f; wa.data()[2] = 30.0f; wa.data()[3] = 40.0f;
+    tl::Tensor wb({4});
+    wb.data()[0] = -1.0f; wb.data()[1] = -2.0f; wb.data()[2] = -3.0f; wb.data()[3] = -4.0f;
+
+    tl::Tensor sel = tl::where(cond, wa, wb);
+    assert(sel.data()[0] == 10.0f);
+    assert(sel.data()[1] == -2.0f);
+    assert(sel.data()[2] == 30.0f);
+    assert(sel.data()[3] == -4.0f);
+
+    // any nonzero is true, not just exactly 1 (negatives and fractions included)
+    tl::Tensor truthy({4});
+    truthy.data()[0] = 2.0f; truthy.data()[1] = -1.0f;
+    truthy.data()[2] = 0.0f; truthy.data()[3] = 0.5f;
+    tl::Tensor t_sel = tl::where(truthy, tl::ones({4}), tl::zeros({4}));
+    assert(t_sel.data()[0] == 1.0f);
+    assert(t_sel.data()[1] == 1.0f);
+    assert(t_sel.data()[2] == 0.0f); // only exact zero is false
+    assert(t_sel.data()[3] == 1.0f);
+  }
+
+  // test where broadcasting: cond broadcasts over a and b
+  {
+    // cond [2,1] selects per row, a and b are [2,3]
+    tl::Tensor rc({2, 1});
+    rc.data()[0] = 1.0f; rc.data()[1] = 0.0f;
+    tl::Tensor ba({2, 3});
+    tl::Tensor bb({2, 3});
+    for (int64_t i = 0; i < 6; ++i) { ba.data()[i] = (float)(i + 1); bb.data()[i] = -(float)(i + 1); }
+
+    tl::Tensor row_sel = tl::where(rc, ba, bb);
+    assert(row_sel.sizes()[0] == 2 && row_sel.sizes()[1] == 3);
+    assert(row_sel.data()[0] == 1.0f && row_sel.data()[2] == 3.0f);   // row 0 from a
+    assert(row_sel.data()[3] == -4.0f && row_sel.data()[5] == -6.0f); // row 1 from b
+
+    // the output can be larger than any single input: [2,1] x [1,3] x [1,1] -> [2,3]
+    tl::Tensor small_a({1, 3});
+    small_a.data()[0] = 1.0f; small_a.data()[1] = 2.0f; small_a.data()[2] = 3.0f;
+    tl::Tensor scalarish = tl::full({1, 1}, -9.0f);
+    tl::Tensor grown = tl::where(rc, small_a, scalarish);
+    assert(grown.sizes()[0] == 2 && grown.sizes()[1] == 3);
+    assert(grown.data()[0] == 1.0f && grown.data()[1] == 2.0f && grown.data()[2] == 3.0f);
+    assert(grown.data()[3] == -9.0f && grown.data()[4] == -9.0f && grown.data()[5] == -9.0f);
+
+    // the attention case: a [T,T] mask against [N, heads, T, T] scores
+    tl::Tensor tri = tl::tril(tl::ones({3, 3}));
+    tl::Tensor keep = tl::full({2, 2, 3, 3}, 5.0f);
+    tl::Tensor drop = tl::full({2, 2, 3, 3}, -1.0f);
+    tl::Tensor masked = tl::where(tri, keep, drop);
+    assert(masked.sizes().size() == 4 && masked.sizes()[0] == 2 && masked.sizes()[3] == 3);
+    for (int64_t plane = 0; plane < 4; ++plane) { // same mask reused for every head
+      const float* p = masked.data() + plane * 9;
+      assert(p[0] == 5.0f && p[1] == -1.0f && p[2] == -1.0f);
+      assert(p[3] == 5.0f && p[4] == 5.0f  && p[5] == -1.0f);
+      assert(p[6] == 5.0f && p[7] == 5.0f  && p[8] == 5.0f);
+    }
+
+    // the conditioning-dropout case: [B,1,1] cond, [1,1,D] token, [B,T,D] embeddings
+    tl::Tensor bcond({2, 1, 1});
+    bcond.data()[0] = 1.0f; bcond.data()[1] = 0.0f;
+    tl::Tensor token = tl::full({1, 1, 4}, 7.0f);
+    tl::Tensor embed({2, 3, 4});
+    for (int64_t i = 0; i < 24; ++i) embed.data()[i] = (float)i;
+
+    tl::Tensor dropped = tl::where(bcond, token, embed);
+    assert(dropped.sizes()[0] == 2 && dropped.sizes()[1] == 3 && dropped.sizes()[2] == 4);
+    for (int64_t i = 0; i < 12; ++i) assert(dropped.data()[i] == 7.0f);        // batch 0 -> token
+    for (int64_t i = 12; i < 24; ++i) assert(dropped.data()[i] == (float)i);   // batch 1 -> embed
+
+    // strided inputs are read through their strides, so no contiguous() is needed
+    tl::Tensor m23({2, 3});
+    for (int64_t i = 0; i < 6; ++i) m23.data()[i] = (float)(i + 1); // [[1,2,3],[4,5,6]]
+    tl::Tensor t32 = tl::transpose(m23, 0, 1);                      // [[1,4],[2,5],[3,6]]
+    tl::Tensor pick({3, 2});
+    pick.data()[0] = 1.0f; pick.data()[1] = 0.0f;
+    pick.data()[2] = 0.0f; pick.data()[3] = 1.0f;
+    pick.data()[4] = 1.0f; pick.data()[5] = 0.0f;
+    tl::Tensor strided_sel = tl::where(pick, t32, tl::zeros({3, 2}));
+    assert(strided_sel.data()[0] == 1.0f && strided_sel.data()[1] == 0.0f);
+    assert(strided_sel.data()[2] == 0.0f && strided_sel.data()[3] == 5.0f);
+    assert(strided_sel.data()[4] == 3.0f && strided_sel.data()[5] == 0.0f);
+
+    // incompatible shapes throw
+    bool threw = false;
+    try { tl::where(tl::ones({2}), tl::ones({3}), tl::ones({3})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
 
   // test variance: [[1,2,3],[4,5,6]] along dim 1
   // row 0: mean=2, var=((1-2)^2 + (2-2)^2 + (3-2)^2) / 3 = 2/3
@@ -876,6 +972,65 @@ void test_ops() {
     try { tl::triu(tl::ones({4})); }
     catch (const std::invalid_argument&) { threw = true; }
     assert(threw);
+  }
+
+  // test masked_fill: mask is a KEEP-mask, so positions where mask == 0 get the value
+  {
+    const float neg_inf = -std::numeric_limits<float>::infinity();
+
+    tl::Tensor vals({2, 3});
+    for (int64_t i = 0; i < 6; ++i) vals.data()[i] = (float)(i + 1); // [[1,2,3],[4,5,6]]
+    tl::Tensor keep({2, 3});
+    keep.data()[0] = 1.0f; keep.data()[1] = 0.0f; keep.data()[2] = 1.0f;
+    keep.data()[3] = 0.0f; keep.data()[4] = 1.0f; keep.data()[5] = 0.0f;
+
+    // direction check: 1 keeps the original value, 0 substitutes the fill
+    tl::Tensor filled = tl::masked_fill(vals, keep, -99.0f);
+    assert(filled.data()[0] == 1.0f);
+    assert(filled.data()[1] == -99.0f);
+    assert(filled.data()[2] == 3.0f);
+    assert(filled.data()[3] == -99.0f);
+    assert(filled.data()[4] == 5.0f);
+    assert(filled.data()[5] == -99.0f);
+
+    // a [T,T] mask broadcasts over [N, heads, T, T] scores, one mask per head
+    tl::Tensor tri = tl::tril(tl::ones({3, 3}));
+    tl::Tensor scores = tl::full({2, 2, 3, 3}, 4.0f);
+    tl::Tensor msk = tl::masked_fill(scores, tri, neg_inf);
+    assert(msk.sizes().size() == 4 && msk.sizes()[0] == 2 && msk.sizes()[3] == 3);
+    for (int64_t plane = 0; plane < 4; ++plane) {
+      const float* p = msk.data() + plane * 9;
+      assert(p[0] == 4.0f && p[1] == neg_inf && p[2] == neg_inf);
+      assert(p[3] == 4.0f && p[4] == 4.0f    && p[5] == neg_inf);
+      assert(p[6] == 4.0f && p[7] == 4.0f    && p[8] == 4.0f);
+    }
+
+    // the whole point: -inf into softmax gives exactly zero weight on blocked keys,
+    // and the surviving weights still sum to 1. uniform scores make the answer exact.
+    tl::Tensor flat_scores = tl::zeros({1, 1, 3, 3});
+    tl::Tensor attn = tl::softmax(tl::masked_fill(flat_scores, tri, neg_inf));
+    const float* w = attn.data();
+    // row 0 sees only key 0
+    assert(is_close(w[0], 1.0f)); assert(w[1] == 0.0f); assert(w[2] == 0.0f);
+    // row 1 splits between keys 0 and 1
+    assert(is_close(w[3], 0.5f)); assert(is_close(w[4], 0.5f)); assert(w[5] == 0.0f);
+    // row 2 is unmasked
+    assert(is_close(w[6], 1.0f / 3.0f));
+    assert(is_close(w[7], 1.0f / 3.0f));
+    assert(is_close(w[8], 1.0f / 3.0f));
+
+    // every row still normalizes, so no NaN leaked through the -inf positions
+    for (int64_t r = 0; r < 3; ++r) {
+      float row_sum = w[r * 3] + w[r * 3 + 1] + w[r * 3 + 2];
+      assert(is_close(row_sum, 1.0f));
+    }
+
+    // sliding-window band through the same pipeline: token 2 must not see token 0
+    tl::Tensor band = tl::triu(tl::tril(tl::ones({3, 3})), -1); // self + 1 previous
+    tl::Tensor band_attn = tl::softmax(tl::masked_fill(tl::zeros({3, 3}), band, neg_inf));
+    assert(band_attn.data()[6] == 0.0f); // row 2, key 0 -> outside the window
+    assert(is_close(band_attn.data()[7], 0.5f));
+    assert(is_close(band_attn.data()[8], 0.5f));
   }
 
   std::cout << "ops tests passed" << std::endl;
