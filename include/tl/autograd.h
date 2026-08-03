@@ -168,6 +168,12 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class WhereBackward: public GradFunction {
+public:
+  Tensor cond_cache; // which branch each output element came from
+  void backward(const Tensor& grad_output) override;
+};
+
 class MatmulBackward: public GradFunction {
 public:
   Tensor a_cache, b_cache;

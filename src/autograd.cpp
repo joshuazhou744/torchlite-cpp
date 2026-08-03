@@ -331,6 +331,13 @@ void ClampBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], result);
 }
 
+void WhereBackward::backward(const Tensor& grad_output) {
+  // gradient flows only through branch that was selected
+  Tensor zero = zeros_like(grad_output);
+  accumulate_grad(inputs[0], sum_to(where(cond_cache, grad_output, zero), inputs[0].sizes()));
+  accumulate_grad(inputs[1], sum_to(where(cond_cache, zero, grad_output), inputs[1].sizes()));
+}
+
 void MatmulBackward::backward(const Tensor& grad_output) {
   // A: (M, K), B:(K, N), C: (M, N)
   // dA = grad @ B^T

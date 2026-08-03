@@ -792,6 +792,12 @@ Tensor where(const Tensor& cond, const Tensor& a, const Tensor& b) {
     op[i] = (cp[index_c] != 0.0f) ? ap[index_a] : bp[index_b];
   }
 
+  if (a.requires_grad || b.requires_grad) {
+    if (auto fn = track<WhereBackward>(out, {&a, &b})) {
+      fn->cond_cache = cond.contiguous();
+    }
+  }
+
   return out;
 }
 
