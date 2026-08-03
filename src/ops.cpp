@@ -765,6 +765,36 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
   return out;
 }
 
+// element-wise select
+Tensor where(const Tensor& cond, const Tensor& a, const Tensor& b) {
+  std::vector<int64_t> out_shape = compute_broadcast_shape(cond.sizes(), compute_broadcast_shape(a.sizes(), b.sizes()));
+  Tensor out(out_shape);
+
+  const auto& sizes_c = cond.sizes();
+  const auto& strides_c = cond.strides();
+  const auto& sizes_a = a.sizes();
+  const auto& strides_a = a.strides();
+  const auto& sizes_b = b.sizes();
+  const auto& strides_b = b.strides();
+
+  const float* cp = cond.data();
+  const float* ap = a.data();
+  const float* bp = b.data();
+  float* op = out.data();
+
+  const int64_t n = out.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    // map output's linear index back into each input's physical layout
+    int64_t index_c = get_broadcast_index(i, sizes_c, strides_c, out_shape);
+    int64_t index_a = get_broadcast_index(i, sizes_a, strides_a, out_shape);
+    int64_t index_b = get_broadcast_index(i, sizes_b, strides_b, out_shape);
+
+    op[i] = (cp[index_c] != 0.0f) ? ap[index_a] : bp[index_b];
+  }
+
+  return out;
+}
+
 // tensor concatenation along existing dimension
 Tensor cat(const std::vector<Tensor>& tensors, int64_t dim) {
   if (tensors.empty()) {
@@ -1387,6 +1417,11 @@ Tensor tril(const Tensor& input, int64_t diagonal) {
 // zero lower triangle
 Tensor triu(const Tensor& input, int64_t diagonal) {
    return tri_impl(input, diagonal, false);
+}
+
+// replace elements where mask == 0 with value
+Tensor masked_fill(const Tensor& input, const Tensor& mask, float value) {
+  return where(mask, input, full_like(input, value));
 }
 
 // convolution of a filter tensor over an input tensor using im2col (unroll inputs into one big matmul)

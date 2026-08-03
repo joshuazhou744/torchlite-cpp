@@ -31,6 +31,10 @@ Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1);
 // tensor reshape
 Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes);
 
+// where: elementwise select
+// cond != 0 ? a : b
+Tensor where(const Tensor& cond, const Tensor& a, const Tensor& b);
+
 // tensor concatenation along existing dimension
 Tensor cat(const std::vector<Tensor>& tensors, int64_t dim);
 
@@ -82,11 +86,14 @@ Tensor clamp(const Tensor& input, float min_val, float max_val);
 // pad: add values to a tensor along a dimension to a target length using a given value
 Tensor pad(const Tensor& input, int64_t dim, int64_t target_len, float value = 0.0f);
 
-// zero out upper triangle, keep col <= row + diagonal over last two dims
+// tril: zero out upper triangle, keep col <= row + diagonal over last two dims
 Tensor tril(const Tensor& input, int64_t diagonal = 0);
 
-// zero out lower triangle, keep col >= row + diagonal over last two dims
+// triu: zero out lower triangle, keep col >= row + diagonal over last two dims
 Tensor triu(const Tensor& input, int64_t diagonal = 0);
+
+// masked_fill: replace elements where mask == 0 with a value
+Tensor masked_fill(const Tensor& input, const Tensor& mask, float value);
 
 // conv2d: slide (C_out, C_in, kH, kW) filters (kernel) over (N, C_in, H, W) input to produce (N, C_out, H_out, W_out)
 Tensor conv2d(const Tensor& input, const Tensor& weight, const Tensor& bias, int64_t stride = 1, int64_t padding = 0, int64_t groups = 1);
