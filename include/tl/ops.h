@@ -31,6 +31,12 @@ Tensor transpose(const Tensor& a, int64_t dim0, int64_t dim1);
 // tensor reshape
 Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes);
 
+// tensor unsqueeze (add a dim size 1)
+Tensor unsqueeze(const Tensor& input, int64_t dim);
+
+// tensor squeeze (remove a dim size 1)
+Tensor squeeze(const Tensor& input, int64_t dim);
+
 // where: elementwise select
 // cond != 0 ? a : b
 Tensor where(const Tensor& cond, const Tensor& a, const Tensor& b);

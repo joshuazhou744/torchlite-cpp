@@ -891,8 +891,8 @@ FourierFeatures::FourierFeatures(int64_t cond_dim)
 }
 
 Tensor FourierFeatures::forward(const Tensor& input) const {
-  // input: [N] -> unsqueeze to [N, 1]
-  Tensor x = reshape(input, {input.sizes()[0], 1});
+  // input: [N] -> [N, 1]
+  Tensor x = unsqueeze(input, 1);
   // [N, 1] @ [1, cond_dim / 2] -> [N, cond_dim / 2]
   Tensor f = scale(matmul(x, weight_), 2.0f * (float)M_PI);
   return cat({cos(f), sin(f)}, 1); // [N, cond_dim]
@@ -956,7 +956,7 @@ std::pair<Tensor, Tensor> LSTM::forward(const Tensor& x) const {
 
   // loop over each timestep
   for (int64_t t = 0; t < T; ++t) {
-    Tensor x_t = reshape(slice(x, 1, t, t + 1), {N, input_size_}); // [N, 1, input] -> [N, input]
+    Tensor x_t = squeeze(slice(x, 1, t, t + 1), 1); // [N, 1, input] -> [N, input]
     std::tie(h_t, c_t) = cell_.forward(x_t, h_t, c_t);
   }
   return {h_t, c_t};

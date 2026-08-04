@@ -765,6 +765,37 @@ Tensor reshape(const Tensor& a, const std::vector<int64_t>& new_sizes) {
   return out;
 }
 
+// insert a 1-sized dim at dim
+Tensor unsqueeze(const Tensor& input, int64_t dim) {
+  int64_t nd = (int64_t)input.sizes().size();
+  if (dim < 0) dim += nd + 1;
+  if (dim < 0 || dim > nd) {
+    throw std::invalid_argument("unsqueeze: dim out of range");
+  }
+  std::vector<int64_t> new_sizes = input.sizes();
+  new_sizes.insert(new_sizes.begin() + dim, 1);
+  return reshape(input, new_sizes);
+}
+
+// remove a 1-sized dim at dim (error if not 1-sized)
+Tensor squeeze(const Tensor& input, int64_t dim) {
+  int64_t nd = (int64_t)input.sizes().size();
+  if (dim < 0) dim += nd;
+  if (dim < 0 || dim >= nd) {
+    throw std::invalid_argument("squeeze: dim out of range");
+  }
+  if (input.sizes()[dim] != 1) {
+    throw std::invalid_argument("squeeze: dim is not size 1");
+  }
+  if (nd == 1) {
+    throw std::invalid_argument("squeeze: cannot squeeze 1D to 0D");
+  }
+  std::vector<int64_t> new_sizes = input.sizes();
+  new_sizes.erase(new_sizes.begin() + dim);
+  return reshape(input, new_sizes);
+}
+
+
 // element-wise select
 Tensor where(const Tensor& cond, const Tensor& a, const Tensor& b) {
   std::vector<int64_t> out_shape = compute_broadcast_shape(cond.sizes(), compute_broadcast_shape(a.sizes(), b.sizes()));
@@ -883,9 +914,7 @@ Tensor stack(const std::vector<Tensor>& tensors, int64_t dim) {
   // unsqueeze each tensor at given dimension, then concatenate
   std::vector<Tensor> unsqueezed;
   for (const auto& t: tensors) {
-    std::vector<int64_t> new_sizes(t.sizes().begin(), t.sizes().end());
-    new_sizes.insert(new_sizes.begin() + dim, 1);
-    unsqueezed.push_back(reshape(t, new_sizes));
+    unsqueezed.push_back(unsqueeze(t, dim));
   }
 
   return cat(unsqueezed, dim);
