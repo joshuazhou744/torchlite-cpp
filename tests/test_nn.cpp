@@ -426,6 +426,72 @@ void test_nn() {
   assert(bn_params[0]->numel() == 3);
   assert(bn_params[1]->numel() == 3);
 
+  // BatchNorm2d with affine = false: pure normalization, no parameters. running stats
+  // are a separate concept (PyTorch's track_running_stats), so the buffers stay.
+  {
+    tl::nn::BatchNorm2d plain(3, 1e-5f, 0.1f, false);
+    assert(plain.parameters().empty());
+    assert(plain.gamma().empty());
+    assert(plain.beta().empty());
+    assert(plain.buffers().size() == 2); // running_mean and running_var still exist
+
+    tl::Tensor x({2, 3, 2, 2});
+    for (int i = 0; i < 24; ++i) x.data()[i] = (float)(i + 1);
+
+    tl::Tensor out = plain.forward(x); // training mode by default
+    assert(out.sizes() == x.sizes());
+
+    // it still normalizes per channel over (N, H, W)
+    for (int64_t c = 0; c < 3; ++c) {
+      float vals[8];
+      float m = 0.0f;
+      int k = 0;
+      for (int64_t n = 0; n < 2; ++n) {
+        for (int64_t i = 0; i < 4; ++i) {
+          vals[k] = out.data()[n * 12 + c * 4 + i];
+          m += vals[k];
+          ++k;
+        }
+      }
+      m /= 8.0f;
+      assert(is_close(m, 0.0f, 1e-4));
+
+      float var = 0.0f;
+      for (int i = 0; i < 8; ++i) var += (vals[i] - m) * (vals[i] - m);
+      var /= 8.0f;
+      assert(is_close(var, 1.0f, 1e-3));
+    }
+
+    // running stats are still tracked with the affine off: they have moved off their
+    // initial zeros/ones after one training forward
+    bool mean_moved = false, var_moved = false;
+    for (int64_t c = 0; c < 3; ++c) {
+      if (!is_close(plain.buffers()[0]->data()[c], 0.0f, 1e-6)) mean_moved = true;
+      if (!is_close(plain.buffers()[1]->data()[c], 1.0f, 1e-6)) var_moved = true;
+    }
+    assert(mean_moved && var_moved);
+
+    // identical to the affine version at its defaults (gamma = 1, beta = 0). the affine
+    // was hoisted out of the training/eval split, so BOTH branches need checking.
+    tl::nn::BatchNorm2d with_affine(3);
+    tl::Tensor ref_train = with_affine.forward(x);
+    for (int i = 0; i < out.numel(); ++i) {
+      assert(is_close(out.data()[i], ref_train.data()[i], 1e-5));
+    }
+    assert(with_affine.parameters().size() == 2);
+
+    // eval branch: both have seen exactly one identical training forward, so their
+    // running stats match and the outputs must agree too
+    plain.set_training(false);
+    with_affine.set_training(false);
+    tl::Tensor eval_plain = plain.forward(x);
+    tl::Tensor eval_ref = with_affine.forward(x);
+    for (int i = 0; i < eval_plain.numel(); ++i) {
+      assert(std::isfinite(eval_plain.data()[i]));
+      assert(is_close(eval_plain.data()[i], eval_ref.data()[i], 1e-5));
+    }
+  }
+
   // test GroupNorm: 4 channels, 2 groups -> normalize over pairs of channels
   // input [N=2, C=4, H=2, W=2]: fill group 0 (ch 0-1) with scale 1, group 1 (ch 2-3) with scale 100
   // post-norm each group should have mean ~0 and variance ~1

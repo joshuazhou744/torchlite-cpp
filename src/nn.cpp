@@ -692,22 +692,27 @@ Tensor Downsample::forward(const Tensor& input) const {
 }
 
 // Batch norm 2D
-BatchNorm2d::BatchNorm2d(int64_t num_channels, float eps, float momentum)
-  : gamma_(ones({num_channels})),
-    beta_(zeros({num_channels})),
+BatchNorm2d::BatchNorm2d(int64_t num_channels, float eps, float momentum, bool affine)
+  : gamma_(affine ? ones({num_channels}) : Tensor()),
+    beta_(affine ? zeros({num_channels}) : Tensor()),
     num_channels_(num_channels),
     eps_(eps),
     momentum_(momentum),
+    affine_(affine),
     running_mean_(zeros({num_channels})),
     running_var_(ones({num_channels}))
 {
-  gamma_.set_requires_grad(true);
-  beta_.set_requires_grad(true);
+  if (affine_) {
+    gamma_.set_requires_grad(true);
+    beta_.set_requires_grad(true);
+  }
   running_mean_.set_requires_grad(false);
   running_var_.set_requires_grad(false);
 }
 
 Tensor BatchNorm2d::forward(const Tensor& input) const {
+  Tensor normed;
+
   if (training_) {
     // input: (N, C, H, W) -> reduce dims with keepdim -> (1, C, 1, 1)
     // get per-channel mean
@@ -732,26 +737,25 @@ Tensor BatchNorm2d::forward(const Tensor& input) const {
 
     // normalize: (x - mu) / sqrt(var + eps)
     Tensor denom = sqrt(add(v, full(v.sizes(), eps_)));
-    Tensor normed = div(diff, denom);
-
-    // learnable scale and shift
-    Tensor g = reshape(gamma_, {1, num_channels_, 1, 1});
-    Tensor b = reshape(beta_, {1, num_channels_, 1, 1});
-    return add(mul(normed, g), b);
+    normed = div(diff, denom);
   } else {
     // eval mode, use running stats
     Tensor m = reshape(running_mean_, {1, num_channels_, 1, 1});
     Tensor v = reshape(running_var_,  {1, num_channels_, 1, 1});
     Tensor denom = sqrt(add(v, full(v.sizes(), eps_)));
-    Tensor normed = div(sub(input, m), denom);
-
-    Tensor g = reshape(gamma_, {1, num_channels_, 1, 1});
-    Tensor b = reshape(beta_,  {1, num_channels_, 1, 1});
-    return add(mul(normed, g), b);
+    normed = div(sub(input, m), denom);
   }
+
+  if (!affine_) return normed;
+
+  // learnable scale and shift
+  Tensor g = reshape(gamma_, {1, num_channels_, 1, 1});
+  Tensor b = reshape(beta_, {1, num_channels_, 1, 1});
+  return add(mul(normed, g), b);
 }
 
 std::vector<Tensor*> BatchNorm2d::parameters() {
+  if (!affine_) return {};
   return {&gamma_, &beta_};
 }
 

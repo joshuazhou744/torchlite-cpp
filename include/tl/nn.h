@@ -404,7 +404,7 @@ private:
 // BatchNorm2d: normalize per channel across (N, H, W)
 class BatchNorm2d: public Module {
 public:
-  BatchNorm2d(int64_t num_channels, float eps = 1e-5, float momentum = 0.1f);
+  BatchNorm2d(int64_t num_channels, float eps = 1e-5, float momentum = 0.1f, bool affine = true);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }
@@ -417,7 +417,6 @@ public:
     return {&running_mean_, &running_var_};
   }
 
-
 private:
   mutable Tensor running_mean_; // per-channel mean, shape [C]
   mutable Tensor running_var_; // per-channel variance, shape [C]
@@ -426,6 +425,7 @@ private:
   int64_t num_channels_;
   float eps_;
   float momentum_;
+  bool affine_;
   bool training_ = true;
 };
 
