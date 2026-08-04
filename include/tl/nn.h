@@ -116,9 +116,10 @@ private:
   bool use_bias_;
 };
 
-// Layer normalization: normalize across last dimension
+// Layer normalization: normalize over trailing dims
 class LayerNorm: public Module {
 public:
+  LayerNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5);
   LayerNorm(int64_t normalized_shape, float eps = 1e-5);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
@@ -130,15 +131,15 @@ public:
 private:
   Tensor gamma_; // learnable scale, shape: [normalized_shape]
   Tensor beta_; // learnable offset, shape: [normalized_shape]
-  int64_t normalized_shape_;
   float eps_; // tiny epsilon to avoid division by 0
 };
 
-// RMS normalization: out = x / sqrt(mean(x^2, last_dim) + eps) * gamma
-// normalizes over last dim only and gamma broadcasts over leading dims
+// RMS normalization: out = x / sqrt(mean(x^2) + eps) * gamma
+// normalizes over trailing dims, gamma takes that shape and broadcasts over leading dims
 class RMSNorm: public Module {
 public:
-  RMSNorm(const std::vector<int64_t>& gamma_shape, float eps = 1e-5);
+  RMSNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5);
+  RMSNorm(int64_t normalized_shape, float eps = 1e-5);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }
