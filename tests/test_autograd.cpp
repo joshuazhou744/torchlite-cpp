@@ -564,5 +564,57 @@ void test_autograd() {
     for (int i = 0; i < 8; ++i) assert(close(x.grad().data()[i], want[i]));
   }
 
+  // BroadcastToBackward: forward replicates, so backward sums over the replicated
+  // axes. this is sum_to, the exact inverse of broadcast_to.
+  {
+    tl::Tensor row({1, 3});
+    for (int i = 0; i < 3; ++i) row.data()[i] = i + 1.0f;
+    row.set_requires_grad(true);
+
+    tl::Tensor y = tl::broadcast_to(row, {2, 3});
+    y.backward(); // seeds grad = ones(2, 3)
+
+    // each element fed 2 output positions -> gradient 2, not 1
+    assert(row.grad().sizes()[0] == 1 && row.grad().sizes()[1] == 3);
+    for (int i = 0; i < 3; ++i) assert(close(row.grad().data()[i], 2.0f));
+  }
+
+  // BroadcastToBackward: replication along the other axis, 4 copies each
+  {
+    tl::Tensor col({3, 1});
+    for (int i = 0; i < 3; ++i) col.data()[i] = i + 1.0f;
+    col.set_requires_grad(true);
+
+    tl::Tensor y = tl::broadcast_to(col, {3, 4});
+    y.backward();
+
+    for (int i = 0; i < 3; ++i) assert(close(col.grad().data()[i], 4.0f));
+  }
+
+  // BroadcastToBackward: new leading dims multiply the count (2 * 2 = 4 copies)
+  {
+    tl::Tensor bare({3});
+    for (int i = 0; i < 3; ++i) bare.data()[i] = i + 1.0f;
+    bare.set_requires_grad(true);
+
+    tl::Tensor y = tl::broadcast_to(bare, {2, 2, 3});
+    y.backward();
+
+    assert(bare.grad().sizes().size() == 1 && bare.grad().sizes()[0] == 3);
+    for (int i = 0; i < 3; ++i) assert(close(bare.grad().data()[i], 4.0f));
+  }
+
+  // BroadcastToBackward: a no-op broadcast passes the gradient straight through
+  {
+    tl::Tensor x({2, 3});
+    for (int i = 0; i < 6; ++i) x.data()[i] = i + 1.0f;
+    x.set_requires_grad(true);
+
+    tl::Tensor y = tl::broadcast_to(x, {2, 3});
+    y.backward();
+
+    for (int i = 0; i < 6; ++i) assert(close(x.grad().data()[i], 1.0f));
+  }
+
   std::cout << "autograd tests passed.\n";
 }

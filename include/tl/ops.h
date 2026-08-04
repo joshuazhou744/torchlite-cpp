@@ -133,4 +133,7 @@ Tensor apply_rotary_half(const Tensor& x, const Tensor& cos, const Tensor& sin);
 // Q head i attends KV head i / n_rep
 Tensor repeat_kv(const Tensor& x, int64_t n_rep);
 
+// broadcast given tensor to a given shape
+Tensor broadcast_to(const Tensor& input, const std::vector<int64_t>& sizes);
+
 }

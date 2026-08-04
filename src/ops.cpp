@@ -1800,7 +1800,7 @@ Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin) {
   return add(mul(x, cos), mul(rot, sin));
 }
 
-// apple RoPE angles with half-split pairing
+// apply RoPE angles with half-split pairing
 Tensor apply_rotary_half(const Tensor& x, const Tensor& cos, const Tensor& sin) {
   int64_t nd = x.sizes().size();
   if (nd < 2) {
@@ -1845,6 +1845,29 @@ Tensor repeat_kv(const Tensor& x, int64_t n_rep) {
   std::vector<Tensor> copies(n_rep, x);
   Tensor out = stack(copies, 2);
   return reshape(out, {N, kv * n_rep, T, hd});
+}
+
+// input broadcasts to any shape
+Tensor broadcast_to(const Tensor& input, const std::vector<int64_t>& sizes) {
+  if (compute_broadcast_shape(input.sizes(), sizes) != sizes) {
+    throw std::invalid_argument("broadcast_to: input shape is not broadcastable to the target");
+  }
+
+  Tensor out(sizes);
+  const auto& in_sizes = input.sizes();
+  const auto& in_strides = input.strides();
+  const float* ip = input.data();
+  float* op = out.data();
+
+  const int64_t n = out.numel();
+  for (int64_t i = 0; i < n; ++i) {
+    op[i] = ip[get_broadcast_index(i, in_sizes, in_strides, sizes)];
+  }
+
+  if (input.requires_grad) {
+    track<BroadcastToBackward>(out, {&input});
+  }
+  return out;
 }
 
 }

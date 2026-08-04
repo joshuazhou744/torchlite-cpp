@@ -1033,5 +1033,81 @@ void test_ops() {
     assert(is_close(band_attn.data()[8], 0.5f));
   }
 
+  // test broadcast_to: replicate along size-1 and missing leading dims
+  {
+    auto check = [](const tl::Tensor& t, const std::vector<int64_t>& shape,
+                    const std::vector<float>& want) {
+      assert(t.sizes() == shape);
+      assert((int64_t)want.size() == t.numel());
+      for (int64_t i = 0; i < t.numel(); ++i) assert(is_close(t.data()[i], want[i]));
+    };
+
+    // [1,3] -> [2,3]: the single row is reused for both output rows
+    tl::Tensor row({1, 3});
+    row.data()[0] = 1.0f; row.data()[1] = 2.0f; row.data()[2] = 3.0f;
+    check(tl::broadcast_to(row, {2, 3}), {2, 3}, {
+      1, 2, 3,
+      1, 2, 3});
+
+    // [3] -> [2,3]: identical, since a missing leading dim counts as 1
+    tl::Tensor bare({3});
+    bare.data()[0] = 1.0f; bare.data()[1] = 2.0f; bare.data()[2] = 3.0f;
+    check(tl::broadcast_to(bare, {2, 3}), {2, 3}, {
+      1, 2, 3,
+      1, 2, 3});
+
+    // [3,1] -> [3,4]: the other axis, so each row's single value fills the row
+    tl::Tensor col({3, 1});
+    col.data()[0] = 1.0f; col.data()[1] = 2.0f; col.data()[2] = 3.0f;
+    check(tl::broadcast_to(col, {3, 4}), {3, 4}, {
+      1, 1, 1, 1,
+      2, 2, 2, 2,
+      3, 3, 3, 3});
+
+    // both axes at once
+    check(tl::broadcast_to(tl::full({1, 1}, 7.0f), {2, 3}), {2, 3}, {
+      7, 7, 7,
+      7, 7, 7});
+
+    // several new leading dims: [3] -> [2,2,3]
+    tl::Tensor deep = tl::broadcast_to(bare, {2, 2, 3});
+    assert(deep.sizes()[0] == 2 && deep.sizes()[1] == 2 && deep.sizes()[2] == 3);
+    for (int64_t plane = 0; plane < 4; ++plane) {
+      const float* p = deep.data() + plane * 3;
+      assert(p[0] == 1.0f && p[1] == 2.0f && p[2] == 3.0f);
+    }
+
+    // broadcasting to the same shape is a no-op copy, values untouched
+    tl::Tensor same({2, 3});
+    for (int64_t i = 0; i < 6; ++i) same.data()[i] = (float)(i + 1);
+    check(tl::broadcast_to(same, {2, 3}), {2, 3}, {1, 2, 3, 4, 5, 6});
+
+    // strided input: get_broadcast_index walks strides, so no contiguous() needed
+    tl::Tensor m23({2, 3});
+    for (int64_t i = 0; i < 6; ++i) m23.data()[i] = (float)(i + 1); // [[1,2,3],[4,5,6]]
+    tl::Tensor t32 = tl::transpose(m23, 0, 1);                      // [[1,4],[2,5],[3,6]]
+    check(tl::broadcast_to(t32, {2, 3, 2}), {2, 3, 2}, {
+      1, 4, 2, 5, 3, 6,
+      1, 4, 2, 5, 3, 6});
+
+    // shrinking throws: broadcasting only ever grows
+    bool threw = false;
+    try { tl::broadcast_to(tl::ones({6}), {3}); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // a non-1 dim cannot be stretched (3 -> 4 has no unambiguous answer)
+    threw = false;
+    try { tl::broadcast_to(bare, {2, 4}); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // dropping a dim throws too
+    threw = false;
+    try { tl::broadcast_to(same, {3}); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
   std::cout << "ops tests passed" << std::endl;
 }

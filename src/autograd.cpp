@@ -715,4 +715,9 @@ void SinBackward::backward(const Tensor& grad_output) {
   accumulate_grad(inputs[0], result);
 }
 
+void BroadcastToBackward::backward(const Tensor& grad_output) {
+  // sum of all broadcasted dims
+  accumulate_grad(inputs[0], sum_to(grad_output, inputs[0].sizes()));
+}
+
 } // tl

@@ -232,6 +232,11 @@ public:
   void backward(const Tensor& grad_output) override;
 };
 
+class BroadcastToBackward: public GradFunction {
+public:
+  void backward(const Tensor& grad_output) override;
+};
+
 // Helper functions
 
 template<typename BackwardFn>
