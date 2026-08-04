@@ -3,6 +3,7 @@
 #include <tl/factory.h>
 #include <cassert>
 #include <cmath>
+#include <stdexcept>
 #include "test_utils.h"
 
 void test_factory() {
@@ -87,6 +88,109 @@ void test_factory() {
   assert(tl::ones_like(ref).data()[5] == 1.0f);
   assert(is_close(tl::full_like(ref, -2.5f).data()[5], -2.5f));
   assert(tl::randn_like(ref).sizes() == ref.sizes());
+
+  // test tri_mask: [rows, cols] of 1s inside the triangle, 0s outside
+  {
+    auto check = [](const tl::Tensor& t, int64_t rows, int64_t cols,
+                    const std::vector<float>& want) {
+      assert(t.sizes().size() == 2);
+      assert(t.sizes()[0] == rows && t.sizes()[1] == cols);
+      assert((int64_t)want.size() == rows * cols);
+      for (int64_t i = 0; i < rows * cols; ++i) assert(t.data()[i] == want[i]);
+    };
+
+    // square, defaults (lower, diagonal 0): keep col <= row
+    check(tl::tri_mask(4, 4), 4, 4, {
+      1, 0, 0, 0,
+      1, 1, 0, 0,
+      1, 1, 1, 0,
+      1, 1, 1, 1});
+
+    // upper: keep col >= row
+    check(tl::tri_mask(4, 4, 0, false), 4, 4, {
+      1, 1, 1, 1,
+      0, 1, 1, 1,
+      0, 0, 1, 1,
+      0, 0, 0, 1});
+
+    // the output holds only exact 0.0 and 1.0, which is what makes masked_fill's
+    // `mask == 0` test and tril's `mul` by the mask exact rather than approximate
+    tl::Tensor binary = tl::tri_mask(5, 3, 1);
+    for (int64_t i = 0; i < binary.numel(); ++i) {
+      assert(binary.data()[i] == 0.0f || binary.data()[i] == 1.0f);
+    }
+
+    // non-square WIDE (rows < cols). asymmetric shapes are the only way to catch
+    // transposed indexing: op[c * rows + r] stays in bounds here and scrambles
+    // the contents while leaving the shape correct
+    check(tl::tri_mask(2, 5), 2, 5, {
+      1, 0, 0, 0, 0,
+      1, 1, 0, 0, 0});
+
+    // non-square TALL (rows > cols)
+    check(tl::tri_mask(5, 2), 5, 2, {
+      1, 0,
+      1, 1,
+      1, 1,
+      1, 1,
+      1, 1});
+
+    // non-square upper, both orientations
+    check(tl::tri_mask(2, 5, 0, false), 2, 5, {
+      1, 1, 1, 1, 1,
+      0, 1, 1, 1, 1});
+    check(tl::tri_mask(5, 2, 0, false), 5, 2, {
+      1, 1,
+      0, 1,
+      0, 0,
+      0, 0,
+      0, 0});
+
+    // the KV-cache case: q_len=2 queries against k_len=5 keys with
+    // diagonal = k_len - q_len, so the newest query sees every key
+    check(tl::tri_mask(2, 5, 3), 2, 5, {
+      1, 1, 1, 1, 0,
+      1, 1, 1, 1, 1});
+
+    // diagonal shifts the boundary one element per row per unit
+    check(tl::tri_mask(3, 3, 1), 3, 3, {
+      1, 1, 0,
+      1, 1, 1,
+      1, 1, 1});
+    check(tl::tri_mask(3, 3, -1), 3, 3, {
+      0, 0, 0,
+      1, 0, 0,
+      1, 1, 0});
+
+    // lower(d=0) and upper(d=1) partition every cell exactly once, so their
+    // elementwise sum is all ones. holds for non-square too, and catches an
+    // off-by-one at the boundary (<= vs <)
+    tl::Tensor lo = tl::tri_mask(3, 5, 0, true);
+    tl::Tensor hi = tl::tri_mask(3, 5, 1, false);
+    for (int64_t i = 0; i < 15; ++i) assert(lo.data()[i] + hi.data()[i] == 1.0f);
+
+    // saturating diagonals: far negative is all zeros, far positive is all ones
+    tl::Tensor none = tl::tri_mask(3, 3, -3);
+    for (int64_t i = 0; i < 9; ++i) assert(none.data()[i] == 0.0f);
+    tl::Tensor all = tl::tri_mask(3, 3, 2);
+    for (int64_t i = 0; i < 9; ++i) assert(all.data()[i] == 1.0f);
+
+    // non-positive dimensions throw
+    bool threw = false;
+    try { tl::tri_mask(0, 3); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { tl::tri_mask(3, 0); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { tl::tri_mask(-1, 3); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
 
   std::cout << "factory tests passed" << std::endl;
 }
