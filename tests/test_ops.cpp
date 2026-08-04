@@ -266,6 +266,117 @@ void test_ops() {
   assert(clamp_out.data()[2] == 5.0f);
   assert(clamp_out.data()[3] == 7.0f);
 
+  // test unsqueeze: insert a size-1 dim. negative dim counts from the end of the
+  // RESULT, which is why the valid range is one wider than the input's ndim
+  {
+    tl::Tensor v({3});
+    for (int64_t i = 0; i < 3; ++i) v.data()[i] = (float)(i + 1);
+
+    tl::Tensor front = tl::unsqueeze(v, 0);
+    assert(front.sizes() == std::vector<int64_t>({1, 3}));
+    tl::Tensor back = tl::unsqueeze(v, 1);
+    assert(back.sizes() == std::vector<int64_t>({3, 1}));
+
+    // dim -1 appends, so it matches dim == ndim rather than ndim - 1
+    assert(tl::unsqueeze(v, -1).sizes() == std::vector<int64_t>({3, 1}));
+    assert(tl::unsqueeze(v, -2).sizes() == std::vector<int64_t>({1, 3}));
+
+    // data is untouched in every case, only the shape changes
+    for (int64_t i = 0; i < 3; ++i) {
+      assert(front.data()[i] == (float)(i + 1));
+      assert(back.data()[i] == (float)(i + 1));
+    }
+    assert(front.numel() == 3 && back.numel() == 3);
+
+    // on a 2D input, -1 must give [2,3,1] and NOT [2,1,3]. this is the test that
+    // catches computing the negative offset against ndim instead of ndim + 1
+    tl::Tensor m({2, 3});
+    for (int64_t i = 0; i < 6; ++i) m.data()[i] = (float)(i + 1);
+    assert(tl::unsqueeze(m, -1).sizes() == std::vector<int64_t>({2, 3, 1}));
+    assert(tl::unsqueeze(m, 1).sizes()  == std::vector<int64_t>({2, 1, 3}));
+    assert(tl::unsqueeze(m, -3).sizes() == std::vector<int64_t>({1, 2, 3})); // far end
+    assert(tl::unsqueeze(m, 2).sizes()  == std::vector<int64_t>({2, 3, 1})); // dim == ndim appends
+
+    // strided input still works (reshape contiguifies), values follow the logical order
+    tl::Tensor t32 = tl::transpose(m, 0, 1); // [[1,4],[2,5],[3,6]]
+    tl::Tensor us = tl::unsqueeze(t32, 0);
+    assert(us.sizes() == std::vector<int64_t>({1, 3, 2}));
+    const float want_strided[6] = {1, 4, 2, 5, 3, 6};
+    for (int64_t i = 0; i < 6; ++i) assert(is_close(us.data()[i], want_strided[i]));
+
+    // out of range: one past the append position, and one past the negative end
+    bool threw = false;
+    try { tl::unsqueeze(m, 3); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { tl::unsqueeze(m, -4); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
+  // test squeeze: remove a size-1 dim. negative dim counts from the end of the
+  // INPUT here, the opposite convention to unsqueeze
+  {
+    tl::Tensor row({1, 3});
+    for (int64_t i = 0; i < 3; ++i) row.data()[i] = (float)(i + 1);
+    tl::Tensor col({3, 1});
+    for (int64_t i = 0; i < 3; ++i) col.data()[i] = (float)(i + 1);
+
+    assert(tl::squeeze(row, 0).sizes() == std::vector<int64_t>({3}));
+    assert(tl::squeeze(col, 1).sizes() == std::vector<int64_t>({3}));
+    assert(tl::squeeze(col, -1).sizes() == std::vector<int64_t>({3}));
+    assert(tl::squeeze(row, -2).sizes() == std::vector<int64_t>({3}));
+
+    tl::Tensor squeezed = tl::squeeze(row, 0);
+    for (int64_t i = 0; i < 3; ++i) assert(squeezed.data()[i] == (float)(i + 1));
+
+    // a middle dim, the shape LSTM::forward relies on: [N, 1, input] -> [N, input]
+    tl::Tensor mid({2, 1, 3});
+    for (int64_t i = 0; i < 6; ++i) mid.data()[i] = (float)(i + 1);
+    tl::Tensor flat = tl::squeeze(mid, 1);
+    assert(flat.sizes() == std::vector<int64_t>({2, 3}));
+    for (int64_t i = 0; i < 6; ++i) assert(flat.data()[i] == (float)(i + 1));
+
+    // squeezing a dim that is not size 1 throws rather than silently no-opping,
+    // which is where this deliberately differs from PyTorch
+    bool threw = false;
+    try { tl::squeeze(mid, 0); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // refuse to produce a 0D tensor, since parts of the library assume >= 1D
+    threw = false;
+    try { tl::squeeze(tl::ones({1}), 0); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // out of range, both directions
+    threw = false;
+    try { tl::squeeze(mid, 3); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { tl::squeeze(mid, -4); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // round trip: squeeze undoes unsqueeze at the same dim, for every valid dim.
+    // this is what pins the two opposite index conventions against each other
+    tl::Tensor base({2, 3});
+    for (int64_t i = 0; i < 6; ++i) base.data()[i] = (float)(i + 1);
+    for (int64_t d = 0; d <= 2; ++d) {
+      tl::Tensor round = tl::squeeze(tl::unsqueeze(base, d), d);
+      assert(round.sizes() == base.sizes());
+      for (int64_t i = 0; i < 6; ++i) assert(round.data()[i] == base.data()[i]);
+    }
+    // and with a negative dim, where unsqueeze uses ndim+1 but squeeze uses ndim
+    tl::Tensor neg_round = tl::squeeze(tl::unsqueeze(base, -1), -1);
+    assert(neg_round.sizes() == base.sizes());
+  }
+
   // test where: elementwise select, cond != 0 picks a, otherwise b
   {
     tl::Tensor cond({4});
