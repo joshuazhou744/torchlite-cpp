@@ -120,7 +120,6 @@ private:
 class LayerNorm: public Module {
 public:
   LayerNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5);
-  LayerNorm(int64_t normalized_shape, float eps = 1e-5);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }
@@ -139,7 +138,6 @@ private:
 class RMSNorm: public Module {
 public:
   RMSNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5);
-  RMSNorm(int64_t normalized_shape, float eps = 1e-5);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }

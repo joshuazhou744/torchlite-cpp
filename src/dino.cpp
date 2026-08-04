@@ -70,10 +70,10 @@ std::vector<Tensor*> DinoAttention::parameters() {
 
 // DinoBlock
 DinoBlock::DinoBlock(int64_t dim, int64_t num_heads, int64_t mlp_hidden)
-  : norm1_(dim, 1e-5f),
+  : norm1_({dim}),
     attn_(dim, num_heads),
     ls1_(full({dim}, 1e-5f)),
-    norm2_(dim, 1e-5f),
+    norm2_({dim}),
     fc1_(dim, mlp_hidden),
     fc2_(mlp_hidden, dim),
     ls2_(full({dim}, 1e-5f))
@@ -101,7 +101,7 @@ DinoViT::DinoViT(int64_t dim, int64_t depth, int64_t num_heads, int64_t patch_si
   : patch_embed_(3, dim, patch_size, patch_size),
     cls_token_(zeros({1, 1, dim})),
     storage_tokens_(zeros({1, n_storage, dim})),
-    norm_(dim, 1e-5f),
+    norm_({dim}),
     patch_size_(patch_size),
     num_heads_(num_heads)
 {

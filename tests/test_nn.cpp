@@ -5,6 +5,7 @@
 #include <tl/factory.h>
 #include <cassert>
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 #include "test_utils.h" // CHECK(): NDEBUG-proof, unlike assert()
 
@@ -32,31 +33,146 @@ void test_nn() {
   assert(lin_batch_out.sizes()[1] == 5);
   assert(lin_batch_out.sizes()[2] == 3);
 
-  // test LayerNorm: output should have mean ~0 and variance ~1
-  tl::nn::LayerNorm ln(4);
-  tl::Tensor ln_in({2, 4});
-  ln_in.data()[0] = 1.0f; ln_in.data()[1] = 2.0f;
-  ln_in.data()[2] = 3.0f; ln_in.data()[3] = 4.0f;
-  ln_in.data()[4] = 10.0f; ln_in.data()[5] = 20.0f;
-  ln_in.data()[6] = 30.0f; ln_in.data()[7] = 40.0f;
+  // test LayerNorm 1D shape: each group along the last dim gets mean ~0, variance ~1
+  {
+    tl::nn::LayerNorm ln({4});
+    assert(ln.parameters().size() == 2);
+    assert(ln.gamma().sizes() == std::vector<int64_t>({4}));
+    assert(ln.beta().sizes() == std::vector<int64_t>({4}));
 
-  tl::Tensor ln_out = ln.forward(ln_in);
-  assert(ln_out.sizes()[0] == 2);
-  assert(ln_out.sizes()[1] == 4);
+    tl::Tensor ln_in({2, 4});
+    ln_in.data()[0] = 1.0f;  ln_in.data()[1] = 2.0f;
+    ln_in.data()[2] = 3.0f;  ln_in.data()[3] = 4.0f;
+    ln_in.data()[4] = 10.0f; ln_in.data()[5] = 20.0f;
+    ln_in.data()[6] = 30.0f; ln_in.data()[7] = 40.0f;
 
-  // each row should have mean ~0 after normalization
-  float row0_mean = (ln_out.data()[0] + ln_out.data()[1] + ln_out.data()[2] + ln_out.data()[3]) / 4.0f;
-  float row1_mean = (ln_out.data()[4] + ln_out.data()[5] + ln_out.data()[6] + ln_out.data()[7]) / 4.0f;
-  assert(is_close(row0_mean, 0.0f, 1e-4));
-  assert(is_close(row1_mean, 0.0f, 1e-4));
+    tl::Tensor ln_out = ln.forward(ln_in);
+    assert(ln_out.sizes()[0] == 2 && ln_out.sizes()[1] == 4);
 
-  // each row should have variance ~1 after normalization
-  float row0_var = 0.0f;
-  for (int i = 0; i < 4; ++i) {
-    row0_var += (ln_out.data()[i] - row0_mean) * (ln_out.data()[i] - row0_mean);
+    // exact values: row 0 has mean 2.5, biased var 1.25, std 1.11803
+    assert(is_close(ln_out.data()[0], -1.34164f, 1e-4));
+    assert(is_close(ln_out.data()[1], -0.44721f, 1e-4));
+    assert(is_close(ln_out.data()[2],  0.44721f, 1e-4));
+    assert(is_close(ln_out.data()[3],  1.34164f, 1e-4));
+
+    // scale invariance: row 1 is 10x row 0, so it normalizes identically
+    for (int i = 0; i < 4; ++i) {
+      assert(is_close(ln_out.data()[4 + i], ln_out.data()[i], 1e-4));
+    }
+
+    // both rows: mean ~0 and variance ~1
+    for (int r = 0; r < 2; ++r) {
+      float m = 0.0f;
+      for (int i = 0; i < 4; ++i) m += ln_out.data()[r * 4 + i];
+      m /= 4.0f;
+      assert(is_close(m, 0.0f, 1e-4));
+
+      float var = 0.0f;
+      for (int i = 0; i < 4; ++i) {
+        float d = ln_out.data()[r * 4 + i] - m;
+        var += d * d;
+      }
+      var /= 4.0f;
+      assert(is_close(var, 1.0f, 1e-4));
+    }
   }
-  row0_var /= 4.0f;
-  assert(is_close(row0_var, 1.0f, 1e-4));
+
+  // LayerNorm: gamma and beta are applied after normalization, as gamma * x_hat + beta
+  {
+    tl::nn::LayerNorm ln({4});
+    tl::Tensor g = tl::full({4}, 2.0f);
+    tl::Tensor b = tl::full({4}, 1.0f);
+    ln.set_gamma(g);
+    ln.set_beta(b);
+
+    tl::Tensor x({1, 4});
+    for (int i = 0; i < 4; ++i) x.data()[i] = (float)(i + 1);
+
+    tl::Tensor out = ln.forward(x);
+    // normalized row is [-1.34164, -0.44721, 0.44721, 1.34164], then 2*x + 1
+    assert(is_close(out.data()[0], -1.68328f, 1e-4));
+    assert(is_close(out.data()[1],  0.10557f, 1e-4));
+    assert(is_close(out.data()[2],  1.89443f, 1e-4));
+    assert(is_close(out.data()[3],  3.68328f, 1e-4));
+  }
+
+  // LayerNorm: leading dims are independent groups, whatever the rank
+  {
+    tl::nn::LayerNorm ln({4});
+    tl::Tensor x({2, 3, 4});
+    for (int i = 0; i < 24; ++i) x.data()[i] = (float)(i * i % 7) + (float)i; // uneven values
+
+    tl::Tensor out = ln.forward(x);
+    assert(out.sizes()[0] == 2 && out.sizes()[1] == 3 && out.sizes()[2] == 4);
+    for (int grp = 0; grp < 6; ++grp) { // 2 * 3 = 6 groups of 4
+      float m = 0.0f;
+      for (int i = 0; i < 4; ++i) m += out.data()[grp * 4 + i];
+      assert(is_close(m / 4.0f, 0.0f, 1e-4));
+    }
+  }
+
+  // LayerNorm: a constant input has zero variance, so eps must keep it finite (not NaN)
+  {
+    tl::nn::LayerNorm ln({4});
+    tl::Tensor x = tl::full({2, 4}, 5.0f);
+    tl::Tensor out = ln.forward(x);
+    for (int i = 0; i < 8; ++i) {
+      assert(std::isfinite(out.data()[i]));
+      assert(is_close(out.data()[i], 0.0f, 1e-4)); // (5 - 5) / sqrt(0 + eps) = 0
+    }
+  }
+
+  // LayerNorm multi-dim normalized_shape: {2,2} pools all 4 trailing values into ONE
+  // group, where (2) would pool two groups of 2. this is the PyTorch convention and
+  // the only test that distinguishes the two.
+  {
+    tl::Tensor x({1, 2, 2});
+    for (int i = 0; i < 4; ++i) x.data()[i] = (float)(i + 1); // [[[1,2],[3,4]]]
+
+    tl::nn::LayerNorm joint({2, 2});
+    tl::Tensor j = joint.forward(x);
+    assert(j.sizes() == std::vector<int64_t>({1, 2, 2}));
+    // one group of 4: mean 2.5, var 1.25, std 1.11803
+    assert(is_close(j.data()[0], -1.34164f, 1e-4));
+    assert(is_close(j.data()[1], -0.44721f, 1e-4));
+    assert(is_close(j.data()[2],  0.44721f, 1e-4));
+    assert(is_close(j.data()[3],  1.34164f, 1e-4));
+
+    tl::nn::LayerNorm per_row({2});
+    tl::Tensor p = per_row.forward(x);
+    // two groups of 2: {1,2} and {3,4}, each mean-centered to +/- 1
+    assert(is_close(p.data()[0], -1.0f, 1e-4));
+    assert(is_close(p.data()[1],  1.0f, 1e-4));
+    assert(is_close(p.data()[2], -1.0f, 1e-4));
+    assert(is_close(p.data()[3],  1.0f, 1e-4));
+
+    // and they genuinely differ, so neither convention silently stands in for the other
+    assert(std::abs(j.data()[0] - p.data()[0]) > 1e-3f);
+
+    // gamma/beta take the full normalized_shape
+    assert(joint.gamma().sizes() == std::vector<int64_t>({2, 2}));
+  }
+
+  // LayerNorm: the input's trailing dims must match normalized_shape
+  {
+    tl::nn::LayerNorm ln({4});
+    bool threw = false;
+    try { ln.forward(tl::ones({2, 3})); } // last dim 3 != 4
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    tl::nn::LayerNorm ln2d({2, 2});
+    threw = false;
+    try { ln2d.forward(tl::ones({2, 2, 3})); } // trailing dims 2,3 != 2,2
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // fewer input dims than normalized_shape
+    threw = false;
+    try { ln2d.forward(tl::ones({2})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
 
   // test RMSNorm: out = x / sqrt(mean(x^2) + eps) * gamma, no mean subtraction
   {
@@ -87,7 +203,8 @@ void test_nn() {
     assert(rms.parameters().size() == 1);
   }
 
-  // test RMSNorm per-head gamma: gamma {heads, head_dim} broadcasts over leading dims
+  // test RMSNorm multi-dim normalized_shape: {2,2} pools all 4 trailing values into
+  // ONE group (PyTorch convention), and gamma takes that shape, landing per position
   {
     tl::nn::RMSNorm rms({2, 2}); // heads=2, head_dim=2
     tl::Tensor g({2, 2});
@@ -95,15 +212,62 @@ void test_nn() {
       g.data()[i] = (float)(i + 1); // gamma = [[1,2],[3,4]]
     rms.set_gamma(g);
 
-    // constant input: x = 5 everywhere -> x / rms(x) = 1 -> output == gamma per position
-    tl::Tensor x({2, 2, 2}); // [T=2, heads=2, head_dim=2]
+    // constant input: x / rms(x) = 1, so the output is gamma itself per position.
+    // note this checks gamma PLACEMENT but not the pooling, since a constant input
+    // has the same rms whatever the group size
+    tl::Tensor c({2, 2, 2}); // [T=2, heads=2, head_dim=2]
     for (int i = 0; i < 8; ++i)
-      x.data()[i] = 5.0f;
+      c.data()[i] = 5.0f;
 
-    tl::Tensor out = rms.forward(x);
+    tl::Tensor c_out = rms.forward(c);
     for (int t = 0; t < 2; ++t)
       for (int i = 0; i < 4; ++i)
-        assert(is_close(out.data()[t * 4 + i], (float)(i + 1), 1e-4));
+        assert(is_close(c_out.data()[t * 4 + i], (float)(i + 1), 1e-4));
+
+    // non-constant input, which DOES pin the pooling. gamma back to ones so only
+    // the normalization shows.
+    rms.set_gamma(tl::ones({2, 2}));
+    tl::Tensor x({1, 2, 2});
+    for (int i = 0; i < 4; ++i) x.data()[i] = (float)(i + 1); // [[[1,2],[3,4]]]
+
+    tl::Tensor joint = rms.forward(x);
+    // one group of 4: mean(x^2) = 7.5, rms = 2.73861
+    assert(is_close(joint.data()[0], 0.36515f, 1e-4));
+    assert(is_close(joint.data()[1], 0.73030f, 1e-4));
+    assert(is_close(joint.data()[2], 1.09545f, 1e-4));
+    assert(is_close(joint.data()[3], 1.46059f, 1e-4));
+
+    // the 1D form pools two groups of 2: {1,2} -> rms 1.58114, {3,4} -> rms 3.53553
+    tl::nn::RMSNorm per_row({2});
+    tl::Tensor p = per_row.forward(x);
+    assert(is_close(p.data()[0], 0.63246f, 1e-4));
+    assert(is_close(p.data()[1], 1.26491f, 1e-4));
+    assert(is_close(p.data()[2], 0.84853f, 1e-4));
+    assert(is_close(p.data()[3], 1.13137f, 1e-4));
+
+    // the two conventions genuinely differ, so neither stands in for the other
+    assert(std::abs(joint.data()[0] - p.data()[0]) > 1e-3f);
+    assert(per_row.gamma().sizes() == std::vector<int64_t>({2}));
+  }
+
+  // RMSNorm: the input's trailing dims must match normalized_shape
+  {
+    tl::nn::RMSNorm rms({4});
+    bool threw = false;
+    try { rms.forward(tl::ones({2, 3})); } // last dim 3 != 4
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    tl::nn::RMSNorm rms2d({2, 2});
+    threw = false;
+    try { rms2d.forward(tl::ones({2, 2, 3})); } // trailing dims 2,3 != 2,2
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { rms2d.forward(tl::ones({2})); } // fewer dims than normalized_shape
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
   }
 
   // test GeLU / GeLUExact modules: thin wrappers, must match their ops exactly

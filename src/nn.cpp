@@ -123,10 +123,6 @@ LayerNorm::LayerNorm(const std::vector<int64_t>& normalized_shape, float eps)
   beta_.set_requires_grad(true);
 }
 
-LayerNorm::LayerNorm(int64_t normalized_shape, float eps)
-  : LayerNorm(std::vector<int64_t> {normalized_shape}, eps)
-{}
-
 Tensor LayerNorm::forward(const Tensor& input) const {
   const auto& in_sizes = input.sizes();
   int64_t nd = (int64_t)in_sizes.size();
@@ -169,10 +165,6 @@ RMSNorm::RMSNorm(const std::vector<int64_t>& normalized_shape, float eps)
 {
   gamma_.set_requires_grad(true);
 }
-
-RMSNorm::RMSNorm(int64_t normalized_shape, float eps)
-  : RMSNorm(std::vector<int64_t> {normalized_shape}, eps)
-{}
 
 Tensor RMSNorm::forward(const Tensor& input) const {
   const auto& in_sizes = input.sizes();
@@ -411,8 +403,8 @@ Tensor SelfAttention2d::forward(const Tensor& input) const {
 // Transformer encoder layer
 TransformerEncoderLayer::TransformerEncoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
   : msa_(d_model, num_heads),
-    norm1_(d_model),
-    norm2_(d_model),
+    norm1_({d_model}),
+    norm2_({d_model}),
     ff1_(d_model, d_ff),
     ff2_(d_ff, d_model),
     dropout_(dropout_p)
@@ -477,9 +469,9 @@ std::vector<Tensor*> TransformerEncoder::parameters() {
 TransformerDecoderLayer::TransformerDecoderLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
   : self_attn_(d_model, num_heads),
     cross_attn_(d_model, num_heads),
-    norm1_(d_model),
-    norm2_(d_model),
-    norm3_(d_model),
+    norm1_({d_model}),
+    norm2_({d_model}),
+    norm3_({d_model}),
     ff1_(d_model, d_ff),
     ff2_(d_ff, d_model),
     dropout_(dropout_p)
@@ -555,8 +547,8 @@ Tensor TransformerDecoder::forward(const Tensor& input) const {
 // Causal transformer layer
 CausalTransformerLayer::CausalTransformerLayer(int64_t d_model, int64_t num_heads, int64_t d_ff, float dropout_p)
   : self_attn_(d_model, num_heads),
-    norm1_(d_model),
-    norm2_(d_model),
+    norm1_({d_model}),
+    norm2_({d_model}),
     ff1_(d_model, d_ff),
     ff2_(d_ff, d_model),
     dropout_(dropout_p)
