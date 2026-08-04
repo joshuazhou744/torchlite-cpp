@@ -756,21 +756,25 @@ std::vector<Tensor*> BatchNorm2d::parameters() {
 }
 
 // Group normalization
-GroupNorm::GroupNorm(int64_t num_groups, int64_t num_channels, float eps)
-  : gamma_(ones({num_channels})),
-    beta_(zeros({num_channels})),
+GroupNorm::GroupNorm(int64_t num_groups, int64_t num_channels, float eps, bool affine)
+  : gamma_(affine ? ones({num_channels}) : Tensor()),
+    beta_(affine ? zeros({num_channels}) : Tensor()),
     num_groups_(num_groups),
     num_channels_(num_channels),
-    eps_(eps)
+    eps_(eps),
+    affine_(affine)
 {
   if (num_channels % num_groups != 0) {
     throw std::invalid_argument("GroupNorm: num_channels must be divisible by num_groups");
   }
-  gamma_.set_requires_grad(true);
-  beta_.set_requires_grad(true);
+  if (affine_) {
+    gamma_.set_requires_grad(true);
+    beta_.set_requires_grad(true);
+  }
 }
 
 std::vector<Tensor*> GroupNorm::parameters() {
+  if (!affine_) return {};
   return {&gamma_, &beta_};
 }
 
@@ -778,6 +782,11 @@ Tensor GroupNorm::forward(const Tensor& input) const {
   // input: [N, C, *] (any spatial dims after channel dim, C)
   int64_t N = input.sizes()[0];
   int64_t C = input.sizes()[1];
+
+  if (C != num_channels_) {
+    throw std::invalid_argument("GroupNorm: input channels must match num_channels");
+  }
+
   int64_t spatial = input.numel() / (N * C);
   int64_t group_size = (C / num_groups_) * spatial;
 
@@ -792,6 +801,8 @@ Tensor GroupNorm::forward(const Tensor& input) const {
   Tensor normed = div(diff, denom);
   normed = reshape(normed, input.sizes()); // back to [N, C, *]
 
+  if (!affine_) return normed;
+
   // broadcast gamma and beta over N and spatial dims
   // reshape to [1, C, 1] for broadcasting
   std::vector<int64_t> param_shape(input.sizes().size(), 1);
@@ -804,12 +815,12 @@ Tensor GroupNorm::forward(const Tensor& input) const {
 
 // Adaptive group normalization
 AdaptiveGroupNorm::AdaptiveGroupNorm(int64_t num_groups, int64_t num_channels, int64_t cond_dim)
-  : norm_(num_groups, num_channels),
+  : norm_(num_groups, num_channels, 1e-5f, false),
     proj_(cond_dim, 2*num_channels)
 {}
 
 std::vector<Tensor*> AdaptiveGroupNorm::parameters() {
-  return proj_.parameters();
+  return collect_params(norm_, proj_);
 }
 
 Tensor AdaptiveGroupNorm::forward(const Tensor& input, const Tensor& cond) const {
@@ -817,7 +828,7 @@ Tensor AdaptiveGroupNorm::forward(const Tensor& input, const Tensor& cond) const
   int64_t N = input.sizes()[0];
   int64_t C = input.sizes()[1];
 
-  Tensor normed = norm_.forward(input); // pure normalization, gamma=1, beta=0
+  Tensor normed = norm_.forward(input); // pure normalization, no affine
 
   // project cond -> [N, 2*C], split into gamma and beta
   Tensor scale_shift = proj_.forward(cond);

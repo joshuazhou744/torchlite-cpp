@@ -470,9 +470,71 @@ void test_nn() {
     assert(gn_params[1]->numel() == 4);
   }
 
+  // GroupNorm with affine = false: pure normalization, no parameters. this is the form
+  // AdaptiveGroupNorm wraps, since its scale/shift come from proj_ instead.
+  {
+    tl::nn::GroupNorm plain(2, 4, 1e-5f, false);
+    assert(plain.parameters().empty());
+    assert(plain.gamma().empty());
+    assert(plain.beta().empty());
+
+    // deterministic, non-degenerate input so each group has real variance
+    tl::Tensor x({2, 4, 2, 2});
+    for (int i = 0; i < 32; ++i) x.data()[i] = (float)(i + 1);
+
+    tl::Tensor out = plain.forward(x);
+    assert(out.sizes() == x.sizes());
+
+    // it still normalizes: each (batch, group) gets mean ~0 and variance ~1
+    for (int64_t n = 0; n < 2; ++n) {
+      for (int64_t g = 0; g < 2; ++g) {
+        float m = 0.0f;
+        for (int64_t c = g * 2; c < g * 2 + 2; ++c)
+          for (int64_t i = 0; i < 4; ++i) m += out.data()[n * 16 + c * 4 + i];
+        m /= 8.0f; // 2 channels * 2H * 2W
+        assert(is_close(m, 0.0f, 1e-4));
+
+        float var = 0.0f;
+        for (int64_t c = g * 2; c < g * 2 + 2; ++c)
+          for (int64_t i = 0; i < 4; ++i) {
+            float d = out.data()[n * 16 + c * 4 + i] - m;
+            var += d * d;
+          }
+        var /= 8.0f;
+        assert(is_close(var, 1.0f, 1e-3));
+      }
+    }
+
+    // identical to the affine version at its defaults (gamma = 1, beta = 0), which
+    // catches an inverted flag
+    tl::nn::GroupNorm with_affine(2, 4);
+    tl::Tensor ref = with_affine.forward(x);
+    for (int i = 0; i < out.numel(); ++i) {
+      assert(is_close(out.data()[i], ref.data()[i], 1e-6));
+    }
+    assert(with_affine.parameters().size() == 2);
+
+    // a channel mismatch must throw. with affine = false there is no gamma reshape to
+    // catch it incidentally, so this depends entirely on the explicit num_channels
+    // check -- without it, the wrong grouping would be used and no error raised.
+    bool threw = false;
+    try { plain.forward(tl::ones({2, 8, 2, 2})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { with_affine.forward(tl::ones({2, 8, 2, 2})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
   // test AdaptiveGroupNorm: output shape preserved, different cond -> different output
   {
     tl::nn::AdaptiveGroupNorm agn(2, 4, 8); // 2 groups, 4 channels, cond_dim=8
+
+    // the inner norm is affine-less, so parameters() is exactly proj_'s weight and
+    // bias. this pins the DIAMOND checkpoint layout, which maps those two tensors.
+    assert(agn.parameters().size() == 2);
 
     tl::Tensor agn_in  = tl::randn({2, 4, 4, 4}); // [N=2, C=4, H=4, W=4]
     tl::Tensor cond1   = tl::randn({2, 8});         // conditioning vector

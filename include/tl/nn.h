@@ -432,7 +432,7 @@ private:
 // GroupNorm: normalize over groups of channels, input [N, C, *]
 class GroupNorm: public Module {
 public:
-  GroupNorm(int64_t num_groups, int64_t num_channels, float eps = 1e-5);
+  GroupNorm(int64_t num_groups, int64_t num_channels, float eps = 1e-5, bool affine = true);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }
@@ -446,6 +446,7 @@ private:
   int64_t num_groups_;
   int64_t num_channels_;
   float eps_;
+  bool affine_;
 };
 
 // AdaptiveGroupNorm: GroupNorm with gamma and beta computed from a conditioning vector
