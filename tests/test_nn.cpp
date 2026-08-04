@@ -174,6 +174,48 @@ void test_nn() {
     assert(threw);
   }
 
+  // LayerNorm with elementwise_affine = false: pure normalization, no parameters.
+  // this is the form AdaLN wraps, so its inner norm adds nothing to the checkpoint.
+  {
+    tl::nn::LayerNorm plain({4}, 1e-5f, false);
+    assert(plain.parameters().empty());
+    assert(plain.gamma().empty());
+    assert(plain.beta().empty());
+
+    tl::Tensor x({1, 4});
+    for (int i = 0; i < 4; ++i) x.data()[i] = (float)(i + 1);
+
+    tl::Tensor out = plain.forward(x);
+    // bare x_hat, no scale or shift applied
+    assert(is_close(out.data()[0], -1.34164f, 1e-4));
+    assert(is_close(out.data()[1], -0.44721f, 1e-4));
+    assert(is_close(out.data()[2],  0.44721f, 1e-4));
+    assert(is_close(out.data()[3],  1.34164f, 1e-4));
+
+    // identical to the affine version at its defaults (gamma = 1, beta = 0)
+    tl::nn::LayerNorm with_affine({4});
+    tl::Tensor ref = with_affine.forward(x);
+    for (int i = 0; i < 4; ++i) assert(is_close(out.data()[i], ref.data()[i], 1e-6));
+    assert(with_affine.parameters().size() == 2); // and that one DOES have params
+
+    // multi-dim shape still pools correctly without an affine. this is the test that
+    // pins k to normalized_shape_ rather than gamma: with an empty gamma, a
+    // gamma-derived k would be 0 and zero out the whole tensor silently.
+    tl::nn::LayerNorm plain2d({2, 2}, 1e-5f, false);
+    assert(plain2d.parameters().empty());
+    tl::Tensor x3({1, 2, 2});
+    for (int i = 0; i < 4; ++i) x3.data()[i] = (float)(i + 1);
+    tl::Tensor o = plain2d.forward(x3);
+    assert(is_close(o.data()[0], -1.34164f, 1e-4)); // one pooled group of 4
+    assert(is_close(o.data()[3],  1.34164f, 1e-4));
+
+    // trailing-dim validation still fires with no gamma to check against
+    bool threw = false;
+    try { plain2d.forward(tl::ones({2, 2, 3})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
   // test RMSNorm: out = x / sqrt(mean(x^2) + eps) * gamma, no mean subtraction
   {
     tl::nn::RMSNorm rms({4});
@@ -268,6 +310,39 @@ void test_nn() {
     try { rms2d.forward(tl::ones({2})); } // fewer dims than normalized_shape
     catch (const std::invalid_argument&) { threw = true; }
     assert(threw);
+  }
+
+  // RMSNorm with elementwise_affine = false: pure normalization, no parameters
+  {
+    tl::nn::RMSNorm plain({4}, 1e-5f, false);
+    assert(plain.parameters().empty());
+    assert(plain.gamma().empty());
+
+    tl::Tensor x({1, 4});
+    for (int i = 0; i < 4; ++i) x.data()[i] = (float)(i + 1);
+
+    tl::Tensor out = plain.forward(x);
+    // rms = sqrt((1+4+9+16)/4) = sqrt(7.5) = 2.73861, no gamma applied
+    assert(is_close(out.data()[0], 0.36515f, 1e-4));
+    assert(is_close(out.data()[1], 0.73030f, 1e-4));
+    assert(is_close(out.data()[2], 1.09545f, 1e-4));
+    assert(is_close(out.data()[3], 1.46059f, 1e-4));
+
+    // identical to the affine version at its default gamma = 1
+    tl::nn::RMSNorm with_affine({4});
+    tl::Tensor ref = with_affine.forward(x);
+    for (int i = 0; i < 4; ++i) assert(is_close(out.data()[i], ref.data()[i], 1e-6));
+    assert(with_affine.parameters().size() == 1);
+
+    // multi-dim pooling without an affine: k must come from normalized_shape_, since
+    // an empty gamma would give k = 0 and silently zero the output
+    tl::nn::RMSNorm plain2d({2, 2}, 1e-5f, false);
+    assert(plain2d.parameters().empty());
+    tl::Tensor x3({1, 2, 2});
+    for (int i = 0; i < 4; ++i) x3.data()[i] = (float)(i + 1);
+    tl::Tensor o = plain2d.forward(x3);
+    assert(is_close(o.data()[0], 0.36515f, 1e-4)); // one pooled group of 4
+    assert(is_close(o.data()[3], 1.46059f, 1e-4));
   }
 
   // test GeLU / GeLUExact modules: thin wrappers, must match their ops exactly

@@ -114,25 +114,29 @@ Tensor Conv2d::forward(const Tensor& input) const {
 }
 
 // Layer normalization
-LayerNorm::LayerNorm(const std::vector<int64_t>& normalized_shape, float eps)
-  : gamma_(ones(normalized_shape)),
-    beta_(zeros(normalized_shape)),
-    eps_(eps)
+LayerNorm::LayerNorm(const std::vector<int64_t>& normalized_shape, float eps, bool elementwise_affine)
+  : gamma_(elementwise_affine ? ones(normalized_shape) : Tensor()),
+    beta_(elementwise_affine ? zeros(normalized_shape) : Tensor()),
+    normalized_shape_(normalized_shape),
+    eps_(eps),
+    affine_(elementwise_affine)
 {
-  gamma_.set_requires_grad(true);
-  beta_.set_requires_grad(true);
+  if (affine_) {
+    gamma_.set_requires_grad(true);
+    beta_.set_requires_grad(true);
+  }
 }
 
 Tensor LayerNorm::forward(const Tensor& input) const {
   const auto& in_sizes = input.sizes();
   int64_t nd = (int64_t)in_sizes.size();
-  int64_t k = (int64_t)gamma_.sizes().size();
+  int64_t k = (int64_t)normalized_shape_.size();
 
   if (nd < k) {
     throw std::invalid_argument("LayerNorm: input has fewer dims than normalized_shape");
   }
   for (int64_t i = 0; i < k; ++i) {
-    if (in_sizes[nd - k + i] != gamma_.sizes()[i]) {
+    if (in_sizes[nd - k + i] != normalized_shape_[i]) {
       throw std::invalid_argument("LayerNorm: input's trailing dims must match normalized_shape");
     }
   }
@@ -140,7 +144,7 @@ Tensor LayerNorm::forward(const Tensor& input) const {
   // flatten the trailing k dims into one
   std::vector<int64_t> flat(in_sizes.begin(), in_sizes.end() - k);
   int64_t tail = 1;
-  for (int64_t i = 0; i < k; ++i) tail *= gamma_.sizes()[i];
+  for (int64_t i = 0; i < k; ++i) tail *= normalized_shape_[i];
   flat.push_back(tail);
 
   Tensor x = reshape(input, flat);
@@ -150,32 +154,36 @@ Tensor LayerNorm::forward(const Tensor& input) const {
   Tensor normed = div(sub(x, m), sqrt(add(v, full(v.sizes(), eps_))));
   normed = reshape(normed, in_sizes);
 
+  if (!affine_) return normed;
   return add(mul(normed, gamma_), beta_);
 }
 
 // get LayerNorm parameters
 std::vector<Tensor*> LayerNorm::parameters() {
+  if (!affine_) return {};
   return {&gamma_, &beta_};
 }
 
 // RMS normalization
-RMSNorm::RMSNorm(const std::vector<int64_t>& normalized_shape, float eps)
-  : gamma_(ones(normalized_shape)),
-    eps_(eps)
+RMSNorm::RMSNorm(const std::vector<int64_t>& normalized_shape, float eps, bool elementwise_affine)
+  : gamma_(elementwise_affine ? ones(normalized_shape) : Tensor()),
+    normalized_shape_(normalized_shape),
+    eps_(eps),
+    affine_(elementwise_affine)
 {
-  gamma_.set_requires_grad(true);
+  if (affine_) gamma_.set_requires_grad(true);
 }
 
 Tensor RMSNorm::forward(const Tensor& input) const {
   const auto& in_sizes = input.sizes();
   int64_t nd = (int64_t)in_sizes.size();
-  int64_t k = (int64_t)gamma_.sizes().size();
+  int64_t k = (int64_t)normalized_shape_.size();
 
   if (nd < k) {
     throw std::invalid_argument("RMSNorm: input has fewer dims than normalized_shape");
   }
   for (int64_t i = 0; i < k; ++i) {
-    if (in_sizes[nd - k + i] != gamma_.sizes()[i]) {
+    if (in_sizes[nd - k + i] != normalized_shape_[i]) {
       throw std::invalid_argument("RMSNorm: input's trailing dims must match normalized_shape");
     }
   }
@@ -183,7 +191,7 @@ Tensor RMSNorm::forward(const Tensor& input) const {
   // flatten the trailing k dims into one
   std::vector<int64_t> flat(in_sizes.begin(), in_sizes.end() - k);
   int64_t tail = 1;
-  for (int64_t i = 0; i < k; ++i) tail *= gamma_.sizes()[i];
+  for (int64_t i = 0; i < k; ++i) tail *= normalized_shape_[i];
   flat.push_back(tail);
 
   Tensor x = reshape(input, flat);
@@ -193,10 +201,12 @@ Tensor RMSNorm::forward(const Tensor& input) const {
   normed = reshape(normed, in_sizes);
 
   // learnable scale
+  if (!affine_) return normed;
   return mul(normed, gamma_);
 }
 
 std::vector<Tensor*> RMSNorm::parameters() {
+  if (!affine_) return {};
   return {&gamma_};
 }
 

@@ -119,7 +119,7 @@ private:
 // Layer normalization: normalize over trailing dims
 class LayerNorm: public Module {
 public:
-  LayerNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5);
+  LayerNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5, bool elementwise_affine = true);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }
@@ -130,14 +130,16 @@ public:
 private:
   Tensor gamma_; // learnable scale, shape: [normalized_shape]
   Tensor beta_; // learnable offset, shape: [normalized_shape]
+  std::vector<int64_t> normalized_shape_;
   float eps_; // tiny epsilon to avoid division by 0
+  bool affine_;
 };
 
 // RMS normalization: out = x / sqrt(mean(x^2) + eps) * gamma
 // normalizes over trailing dims, gamma takes that shape and broadcasts over leading dims
 class RMSNorm: public Module {
 public:
-  RMSNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5);
+  RMSNorm(const std::vector<int64_t>& normalized_shape, float eps = 1e-5, bool elementwise_affine = true);
   Tensor forward(const Tensor& input) const override;
   std::vector<Tensor*> parameters() override;
   void set_gamma(const Tensor& g) { gamma_ = g; }
@@ -145,7 +147,9 @@ public:
 
 private:
   Tensor gamma_;
+  std::vector<int64_t> normalized_shape_;
   float eps_;
+  bool affine_;
 };
 
 // Dropout: turn random elements to zero during training
