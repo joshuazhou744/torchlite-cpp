@@ -164,6 +164,73 @@ std::vector<Tensor*> LayerNorm::parameters() {
   return {&gamma_, &beta_};
 }
 
+// QK Layer normalization
+QKLayerNorm::QKLayerNorm(const std::vector<int64_t>& scale_shape, float eps)
+  : scale_(ones(scale_shape)),
+    eps_(eps)
+{
+  scale_.set_requires_grad(true);
+}
+
+Tensor QKLayerNorm::forward(const Tensor& input) const {
+  const auto& in_sizes = input.sizes();
+  int64_t nd = (int64_t)in_sizes.size();
+  int64_t k = (int64_t)scale_.sizes().size();
+
+  if (nd < k) {
+    throw std::invalid_argument("QKLayerNorm: input has fewer dims than scale_shape");
+  }
+  for (int64_t i = 0; i < k; ++i) {
+    if (in_sizes[nd - k + i] != scale_.sizes()[i]) {
+      throw std::invalid_argument("QKLayerNorm: input's trailing dims must match scale_shape");
+    }
+  }
+
+  int64_t dim = nd - 1; // last dim
+  Tensor m = mean(input, dim, true);
+  Tensor v = variance(input, dim, true);
+  Tensor normed = div(sub(input, m), sqrt(add(v, full(v.sizes(), eps_))));
+
+  return mul(normed, scale_);
+}
+
+std::vector<Tensor*> QKLayerNorm::parameters() {
+  return {&scale_};
+}
+
+// QK RMS normalization
+QKRMSNorm::QKRMSNorm(const std::vector<int64_t>& scale_shape, float eps)
+  : scale_(ones(scale_shape)),
+    eps_(eps)
+{
+  scale_.set_requires_grad(true);
+}
+
+Tensor QKRMSNorm::forward(const Tensor& input) const {
+  const auto& in_sizes = input.sizes();
+  int64_t nd = (int64_t)in_sizes.size();
+  int64_t k = (int64_t)scale_.sizes().size();
+
+  if (nd < k) {
+    throw std::invalid_argument("QKRMSNorm: input has fewer dims than scale_shape");
+  }
+  for (int64_t i = 0; i < k; ++i) {
+    if (in_sizes[nd - k + i] != scale_.sizes()[i]) {
+      throw std::invalid_argument("QKRMSNorm: input's trailing dims must match scale_shape");
+    }
+  }
+
+  int64_t dim = nd - 1; // last dim
+  Tensor ms = mean(mul(input, input), dim, true);
+  Tensor normed = div(input, sqrt(add(ms, full(ms.sizes(), eps_))));
+
+  return mul(normed, scale_);
+}
+
+std::vector<Tensor*> QKRMSNorm::parameters() {
+  return {&scale_};
+}
+
 // RMS normalization
 RMSNorm::RMSNorm(const std::vector<int64_t>& normalized_shape, float eps, bool elementwise_affine)
   : gamma_(elementwise_affine ? ones(normalized_shape) : Tensor()),

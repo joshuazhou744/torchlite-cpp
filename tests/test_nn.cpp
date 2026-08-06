@@ -216,6 +216,183 @@ void test_nn() {
     assert(threw);
   }
 
+  // test QKLayerNorm: normalizes over the LAST dim only, so each head standardizes
+  // against its own statistics, while the scale keeps a per-head, per-channel value.
+  // input [batch=1, heads=2, head_dim=3]; head 1 is 10x head 0.
+  {
+    tl::nn::QKLayerNorm qkln({2, 3}); // {num_heads, head_dim}
+    assert(qkln.parameters().size() == 1);
+    assert(qkln.scale().sizes() == std::vector<int64_t>({2, 3}));
+
+    tl::Tensor q({1, 2, 3});
+    q.data()[0] = 1.0f;  q.data()[1] = 2.0f;  q.data()[2] = 3.0f;   // head 0
+    q.data()[3] = 10.0f; q.data()[4] = 20.0f; q.data()[5] = 30.0f;  // head 1
+
+    tl::Tensor out = qkln.forward(q);
+    assert(out.sizes() == q.sizes());
+
+    // head 0: mean 2, std 0.8165. head 1: mean 20, std 8.165.
+    // head 1 is a scalar multiple of head 0, so both land on the SAME values --
+    // that is per-head independence, and it is the whole point of this class.
+    const float want[3] = {-1.22474f, 0.0f, 1.22474f};
+    for (int i = 0; i < 3; ++i) {
+      assert(is_close(out.data()[i], want[i], 1e-4));     // head 0
+      assert(is_close(out.data()[3 + i], want[i], 1e-4)); // head 1
+    }
+
+    // the contrast that justifies the class existing: LayerNorm({2,3}) pools all 6
+    // values into ONE group, so head 1's magnitude contaminates head 0
+    tl::nn::LayerNorm pooled({2, 3});
+    tl::Tensor p = pooled.forward(q);
+    assert(is_close(p.data()[0], -0.93386f, 1e-4)); // vs -1.22474 above
+    assert(std::abs(p.data()[0] - out.data()[0]) > 0.2f);
+    // and under pooling head 0 is no longer centered: all three stay negative
+    assert(p.data()[0] < 0.0f && p.data()[1] < 0.0f && p.data()[2] < 0.0f);
+
+    // LayerNorm({3}) gets the normalization right but can only hold a [3] scale,
+    // so it agrees with QKLayerNorm only while the scale is all ones
+    tl::nn::LayerNorm last_dim({3});
+    tl::Tensor l = last_dim.forward(q);
+    for (int i = 0; i < 6; ++i) assert(is_close(l.data()[i], out.data()[i], 1e-4));
+  }
+
+  // QKLayerNorm: the per-head scale applies independently to each head
+  {
+    tl::nn::QKLayerNorm qkln({2, 3});
+    tl::Tensor s({2, 3});
+    s.data()[0] = 1.0f; s.data()[1] = 1.0f; s.data()[2] = 1.0f; // head 0 unchanged
+    s.data()[3] = 2.0f; s.data()[4] = 2.0f; s.data()[5] = 2.0f; // head 1 doubled
+    qkln.set_scale(s);
+
+    tl::Tensor q({1, 2, 3});
+    q.data()[0] = 1.0f;  q.data()[1] = 2.0f;  q.data()[2] = 3.0f;
+    q.data()[3] = 10.0f; q.data()[4] = 20.0f; q.data()[5] = 30.0f;
+
+    tl::Tensor out = qkln.forward(q);
+    assert(is_close(out.data()[0], -1.22474f, 1e-4)); // head 0: x1
+    assert(is_close(out.data()[2],  1.22474f, 1e-4));
+    assert(is_close(out.data()[3], -2.44949f, 1e-4)); // head 1: x2
+    assert(is_close(out.data()[5],  2.44949f, 1e-4));
+  }
+
+  // QKLayerNorm: leading dims are all independent, so every (batch, head) pair
+  // normalizes on its own. all four heads here are multiples of [1,2,3].
+  {
+    tl::nn::QKLayerNorm qkln({2, 3});
+    tl::Tensor q({2, 2, 3});
+    const float scales[4] = {1.0f, 10.0f, 100.0f, 1000.0f};
+    for (int h = 0; h < 4; ++h) {
+      for (int i = 0; i < 3; ++i) q.data()[h * 3 + i] = scales[h] * (float)(i + 1);
+    }
+
+    tl::Tensor out = qkln.forward(q);
+    const float want[3] = {-1.22474f, 0.0f, 1.22474f};
+    for (int h = 0; h < 4; ++h) {
+      for (int i = 0; i < 3; ++i) assert(is_close(out.data()[h * 3 + i], want[i], 1e-4));
+    }
+  }
+
+  // QKLayerNorm: a constant head has zero variance, so eps keeps it finite
+  {
+    tl::nn::QKLayerNorm qkln({2, 3});
+    tl::Tensor q = tl::full({1, 2, 3}, 5.0f);
+    tl::Tensor out = qkln.forward(q);
+    for (int i = 0; i < 6; ++i) {
+      assert(std::isfinite(out.data()[i]));
+      assert(is_close(out.data()[i], 0.0f, 1e-4));
+    }
+  }
+
+  // QKLayerNorm: trailing dims must match scale_shape. this also guards the call site
+  // -- MIRA applies QK-norm while the layout is [B, T, heads, head_dim], BEFORE the
+  // transpose to [B, heads, T, head_dim]. Normalizing after the transpose would put
+  // [T, head_dim] in the trailing position and is rejected here.
+  {
+    tl::nn::QKLayerNorm qkln({2, 3});
+
+    bool threw = false;
+    try { qkln.forward(tl::ones({1, 3, 3})); } // trailing dims 3,3 != 2,3
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // post-transpose layout [B, heads, T, head_dim] with T = 1
+    threw = false;
+    try { qkln.forward(tl::ones({1, 2, 1, 3})); } // trailing dims 1,3 != 2,3
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // fewer dims than scale_shape
+    threw = false;
+    try { qkln.forward(tl::ones({3})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
+  // test QKRMSNorm: same per-head independence, no mean subtraction
+  {
+    tl::nn::QKRMSNorm qkrms({2, 3});
+    assert(qkrms.parameters().size() == 1);
+    assert(qkrms.scale().sizes() == std::vector<int64_t>({2, 3}));
+
+    tl::Tensor q({1, 2, 3});
+    q.data()[0] = 1.0f;  q.data()[1] = 2.0f;  q.data()[2] = 3.0f;
+    q.data()[3] = 10.0f; q.data()[4] = 20.0f; q.data()[5] = 30.0f;
+
+    tl::Tensor out = qkrms.forward(q);
+
+    // head 0: rms = sqrt((1+4+9)/3) = sqrt(4.6667) = 2.16025
+    // head 1: rms = sqrt(466.67) = 21.6025, so it lands on the same values
+    const float want[3] = {0.46291f, 0.92582f, 1.38873f};
+    for (int i = 0; i < 3; ++i) {
+      assert(is_close(out.data()[i], want[i], 1e-4));
+      assert(is_close(out.data()[3 + i], want[i], 1e-4));
+    }
+
+    // no centering, unlike QKLayerNorm: an all-positive head stays all-positive
+    for (int i = 0; i < 6; ++i) assert(out.data()[i] > 0.0f);
+
+    // RMSNorm({2,3}) pools all 6 values instead, so head 0 is squashed by head 1
+    tl::nn::RMSNorm pooled({2, 3});
+    tl::Tensor p = pooled.forward(q);
+    assert(is_close(p.data()[0], 0.06514f, 1e-4)); // vs 0.46291 above
+    assert(std::abs(p.data()[0] - out.data()[0]) > 0.3f);
+  }
+
+  // QKRMSNorm: per-head scale, and the trailing-dim guard
+  {
+    tl::nn::QKRMSNorm qkrms({2, 3});
+    tl::Tensor s({2, 3});
+    for (int i = 0; i < 3; ++i) { s.data()[i] = 1.0f; s.data()[3 + i] = 2.0f; }
+    qkrms.set_scale(s);
+
+    tl::Tensor q({1, 2, 3});
+    q.data()[0] = 1.0f;  q.data()[1] = 2.0f;  q.data()[2] = 3.0f;
+    q.data()[3] = 10.0f; q.data()[4] = 20.0f; q.data()[5] = 30.0f;
+
+    tl::Tensor out = qkrms.forward(q);
+    assert(is_close(out.data()[0], 0.46291f, 1e-4)); // head 0: x1
+    assert(is_close(out.data()[3], 0.92582f, 1e-4)); // head 1: x2
+
+    bool threw = false;
+    try { qkrms.forward(tl::ones({1, 3, 3})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { qkrms.forward(tl::ones({3})); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
+  // QKLayerNorm and QKRMSNorm share the same parameter shape, so a checkpoint saved
+  // for one loads into the other -- MIRA relies on this to swap qk_norm by config
+  {
+    tl::nn::QKLayerNorm a({4, 8});
+    tl::nn::QKRMSNorm b({4, 8});
+    assert(a.parameters().size() == b.parameters().size());
+    assert(a.parameters()[0]->sizes() == b.parameters()[0]->sizes());
+  }
+
   // test RMSNorm: out = x / sqrt(mean(x^2) + eps) * gamma, no mean subtraction
   {
     tl::nn::RMSNorm rms({4});

@@ -152,6 +152,34 @@ private:
   bool affine_;
 };
 
+// Per-head QK normalization, normalizes over last dim only and scales
+// by a parameter of shape scale_shape
+class QKLayerNorm: public Module {
+public:
+  QKLayerNorm(const std::vector<int64_t>& scale_shape, float eps = 1e-5f);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_scale(const Tensor& s) { scale_ = s; }
+  const Tensor& scale() const { return scale_; }
+private:
+  Tensor scale_; // shape: scale_shape
+  float eps_;
+};
+
+// Per-head QK RMS normalization
+class QKRMSNorm: public Module {
+public:
+  QKRMSNorm(const std::vector<int64_t>& scale_shape, float eps = 1e-5f);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_scale(const Tensor& s) { scale_ = s; }
+  const Tensor& scale() const { return scale_; }
+private:
+  Tensor scale_;
+  float eps_;
+};
+
+
 // Dropout: turn random elements to zero during training
 class Dropout: public Module {
 public:
