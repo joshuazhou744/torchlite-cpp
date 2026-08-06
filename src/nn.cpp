@@ -1093,5 +1093,30 @@ std::vector<Tensor*> LSTM::parameters() {
   return cell_.parameters();
 }
 
+// SwiGLU
+
+// helper to calculate swiglu hidden dim
+// apply formula and round up to nearest multiple of 256
+// hidden = round_up(2 * dim_multiplier * dim / 3, multiple_of)
+static int64_t swiglu_hidden(int64_t dim, int64_t dim_multiplier, int64_t multiple_of) {
+  int64_t h = (2 * dim_multiplier * dim) / 3;
+  return multiple_of * ((h + multiple_of - 1) / multiple_of);
+}
+
+SwiGLU::SwiGLU(int64_t dim, int64_t dim_multiplier, int64_t multiple_of)
+  : hidden_dim_(swiglu_hidden(dim, dim_multiplier, multiple_of)),
+    swish_(dim, hidden_dim_, false),
+    gate_(dim, hidden_dim_, false),
+    out_(hidden_dim_, dim, false)
+{}
+
+Tensor SwiGLU::forward(const Tensor& input) const {
+  return out_.forward(mul(silu(swish_.forward(input)), gate_.forward(input)));
+}
+
+std::vector<Tensor*> SwiGLU::parameters() {
+  return collect_params(swish_, gate_, out_);
+}
+
 }
 }

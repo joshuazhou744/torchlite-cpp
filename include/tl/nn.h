@@ -179,7 +179,6 @@ private:
   float eps_;
 };
 
-
 // Dropout: turn random elements to zero during training
 class Dropout: public Module {
 public:
@@ -590,6 +589,21 @@ private:
   LSTMCell cell_; // one cell reused every timestep
   int64_t input_size_;
   int64_t hidden_size_;
+};
+
+// SwiGLU feed-forward network
+// out = out_(silu(swish_(x)) * gate_(x))
+class SwiGLU: public Module {
+public:
+  SwiGLU(int64_t dim, int64_t dim_multiplier = 4, int64_t multiple_of = 256);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  int64_t hidden_dim() const { return hidden_dim_; }
+private:
+  int64_t hidden_dim_;
+  Linear swish_; // dim -> hidden_dim_
+  Linear gate_; // dim -> hidden_dim_
+  Linear out_; // hidden_dim_ -> dim
 };
 
 } // nn
