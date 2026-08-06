@@ -1377,5 +1377,108 @@ void test_nn() {
     assert(threw);
   }
 
+  // test SwiGLU hidden width: round_up(2 * dim_multiplier * dim / 3, multiple_of).
+  // the rounding behaviour depends only on whether 2*mult*dim/3 is a multiple of
+  // multiple_of, not on magnitude, so tiny dims cover every case -- and constructing
+  // realistic ones here would randn-initialize tens of millions of unused weights.
+  {
+    assert(tl::nn::SwiGLU(5,  4, 1).hidden_dim() == 13);  // 40/3 truncates to 13
+    assert(tl::nn::SwiGLU(12, 4, 5).hidden_dim() == 35);  // 32 -> rounded up to 35
+    assert(tl::nn::SwiGLU(12, 4, 8).hidden_dim() == 32);  // 32 already aligned
+    assert(tl::nn::SwiGLU(12, 6, 1).hidden_dim() == 48);  // multiplier is honoured
+    assert(tl::nn::SwiGLU(3,  1, 1).hidden_dim() == 2);   // 2*1*3/3 = 2
+
+    // one realistic config, which also documents the parameter layout a checkpoint
+    // will map onto: [in, out] for the two up-projections, reversed for the output
+    tl::nn::SwiGLU real(768);
+    assert(real.hidden_dim() == 2048);
+    auto rp = real.parameters();
+    assert(rp[0]->sizes() == std::vector<int64_t>({768, 2048})); // swish_
+    assert(rp[1]->sizes() == std::vector<int64_t>({768, 2048})); // gate_
+    assert(rp[2]->sizes() == std::vector<int64_t>({2048, 768})); // out_
+  }
+
+  // SwiGLU: three bias-free projections, input shape preserved through leading dims
+  {
+    tl::nn::SwiGLU ff(64); // hidden = round_up(170, 256) = 256
+    assert(ff.hidden_dim() == 256);
+
+    auto p = ff.parameters();
+    assert(p.size() == 3); // 6 would mean biases crept in
+    assert(p[0]->sizes() == std::vector<int64_t>({64, 256}));
+    assert(p[1]->sizes() == std::vector<int64_t>({64, 256}));
+    assert(p[2]->sizes() == std::vector<int64_t>({256, 64}));
+
+    // leading dims pass through untouched: only the last dim is projected
+    assert(ff.forward(tl::randn({2, 5, 64})).sizes() == std::vector<int64_t>({2, 5, 64}));
+    assert(ff.forward(tl::randn({2, 3, 4, 64})).sizes() == std::vector<int64_t>({2, 3, 4, 64}));
+  }
+
+  // SwiGLU exact values: out_(silu(swish_(x)) * gate_(x)), computed by hand.
+  // dim = 3, hidden = 2. weights are written through parameters(), which is also
+  // how a checkpoint load reaches them.
+  {
+    tl::nn::SwiGLU ff(3, 1, 1);
+    assert(ff.hidden_dim() == 2);
+
+    auto p = ff.parameters();
+    for (auto* t: p) {
+      for (int64_t i = 0; i < t->numel(); ++i) t->data()[i] = 0.0f;
+    }
+    // swish_ weight [3, 2], row 0 = [1, 2]  ->  swish_(x) = [1, 2] for x = [1,0,0]
+    p[0]->data()[0] = 1.0f; p[0]->data()[1] = 2.0f;
+    // gate_ weight [3, 2], row 0 = [3, 4]   ->  gate_(x)  = [3, 4]
+    p[1]->data()[0] = 3.0f; p[1]->data()[1] = 4.0f;
+    // out_ weight [2, 3] = [[1,0,0],[0,1,0]]  ->  passes the two hidden values through
+    p[2]->data()[0] = 1.0f;
+    p[2]->data()[4] = 1.0f;
+
+    tl::Tensor x({1, 3});
+    x.data()[0] = 1.0f; x.data()[1] = 0.0f; x.data()[2] = 0.0f;
+
+    tl::Tensor out = ff.forward(x);
+    // silu(1) = 1 * sigmoid(1) = 0.7310586,  silu(2) = 2 * sigmoid(2) = 1.7615942
+    // gated:  0.7310586 * 3 = 2.1931758,     1.7615942 * 4 = 7.0463768
+    assert(is_close(out.data()[0], 2.1931758f, 1e-5));
+    assert(is_close(out.data()[1], 7.0463768f, 1e-5));
+    assert(is_close(out.data()[2], 0.0f, 1e-6));
+
+    // had the gate been ADDED rather than multiplied, this would read
+    // [0.7310586 + 3, 1.7615942 + 4] = [3.731, 5.762] instead
+    assert(std::abs(out.data()[0] - 3.731f) > 1e-2f);
+  }
+
+  // SwiGLU: the gate can shut a channel off entirely, which a pointwise activation
+  // cannot do -- zero the gate projection and the output vanishes regardless of swish_
+  {
+    tl::nn::SwiGLU ff(3, 1, 1);
+    auto p = ff.parameters();
+    for (int64_t i = 0; i < p[0]->numel(); ++i) p[0]->data()[i] = 1.0f;  // swish_ nonzero
+    for (int64_t i = 0; i < p[1]->numel(); ++i) p[1]->data()[i] = 0.0f;  // gate_ zeroed
+    for (int64_t i = 0; i < p[2]->numel(); ++i) p[2]->data()[i] = 1.0f;  // out_ nonzero
+
+    tl::Tensor out = ff.forward(tl::randn({2, 3}));
+    for (int64_t i = 0; i < out.numel(); ++i) assert(is_close(out.data()[i], 0.0f, 1e-6));
+  }
+
+  // SwiGLU: finite on a realistic width, and the two projections are independent
+  // (identical weights on swish_ and gate_ would make the output silu(z) * z)
+  {
+    tl::nn::SwiGLU ff(64);
+    tl::Tensor out = ff.forward(tl::randn({2, 7, 64}));
+    for (int64_t i = 0; i < out.numel(); ++i) assert(std::isfinite(out.data()[i]));
+
+    // a second instance has independently initialized weights, so outputs differ
+    tl::nn::SwiGLU ff2(64);
+    tl::Tensor x = tl::randn({1, 64});
+    tl::Tensor a = ff.forward(x);
+    tl::Tensor b = ff2.forward(x);
+    bool differs = false;
+    for (int64_t i = 0; i < a.numel(); ++i) {
+      if (!is_close(a.data()[i], b.data()[i], 1e-6)) { differs = true; break; }
+    }
+    assert(differs);
+  }
+
   std::cout << "nn tests passed" << std::endl;
 }
