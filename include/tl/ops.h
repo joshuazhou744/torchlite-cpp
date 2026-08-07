@@ -127,6 +127,9 @@ std::pair<Tensor, Tensor> rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, flo
 // DINOv3 2D RoPE tables for h x w patch grid
 std::pair<Tensor, Tensor> dino_rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float base = 100.0f);
 
+// MIRA 2D RoPE tables for h x w patch grid
+std::pair<Tensor, Tensor> mira_rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float max_period = 100.0f);
+
 // rotate x by RoPE angles: out = x * cos + rotate_half(x) * sin
 // x: [..., T, dim] with cos/sin [T, dim] broadcasting over leading dims
 Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin);

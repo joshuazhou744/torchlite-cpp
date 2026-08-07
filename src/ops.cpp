@@ -10,6 +10,7 @@
 #include <cmath> // for sqrt() and exp()
 #include <limits> // for infinity
 #include <thread>
+#include <algorithm>
 
 #if defined(__aarch64__) || defined(__ARM_NEON)
   #include <arm_neon.h>
@@ -1783,20 +1784,59 @@ std::pair<Tensor, Tensor> dino_rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim
         float ay = two_pi * cy / periods[k];
         float ax = two_pi * cx / periods[k];
         // layout [row | col] tiled twice: channels i and i + dim/2 share an angle
-        cp[k] = std::cos(ay);
-        cp[k + half] = cp[k];
-        cp[d4 + k] = std::cos(ax);
-        cp[d4 + k + half] = cp[d4 + k];
-        sp[k] = std::sin(ay);
-        sp[k + half] = sp[k];
-        sp[d4 + k] = std::sin(ax);
-        sp[d4 + k + half] = sp[d4 + k];
+        cp[k] = cp[k + half] = std::cos(ay);
+        cp[d4 + k] = cp[d4 + k + half] = std::cos(ax);
+        sp[k] = sp[k + half] = std::sin(ay);
+        sp[d4 + k] = sp[d4 + k + half] = std::sin(ax);
       }
     }
   }
   return {cos_t, sin_t};
 }
 
+// MIRA 2D RoPE tables
+std::pair<Tensor, Tensor> mira_rope_cos_sin_2d(int64_t h, int64_t w, int64_t dim, float max_period) {
+  if (dim % 4 != 0) {
+    throw std::invalid_argument("mira_rope_cos_sin_2d: dim must be divisible by 4");
+  }
+  if (max_period < 2.0f) {
+    throw std::invalid_argument("mira_rope_cos_sin_2d: max_period must be >= 2 tokens");
+  }
+  int64_t n = dim / 4;
+  int64_t half = dim / 2;
+  float f_min = 2.0f * (float)M_PI / max_period;
+  float f_max = (float)M_PI;
+
+  std::vector<float> inv_freq(n);
+  for (int64_t i = 0; i < n; ++i) {
+    float t = (float)i / (float)std::max<int64_t>(n - 1, 1);
+    inv_freq[i] = f_min * std::pow(f_max / f_min, t);
+  }
+
+  Tensor cos_t({h * w, dim});
+  Tensor sin_t({h * w, dim});
+  for (int64_t r = 0; r < h; ++r) { // y index
+    for (int64_t c = 0; c < w; ++c) { // x index
+      float* cp = cos_t.data() + (r * w + c) * dim;
+      float* sp = sin_t.data() + (r * w + c) * dim;
+      for (int64_t k = 0; k < n; ++k) {
+        float ay = (float)r * inv_freq[k]; // y angle
+        float ax = (float)c * inv_freq[k]; // x angle
+        float cy = std::cos(ay), sy = std::sin(ay);
+        float cx = std::cos(ax), sx = std::sin(ax);
+
+        // y half: channels 2k and 2k + 1
+        cp[2 * k] = cp[2 * k + 1] = cy;
+        sp[2 * k] = sp[2 * k + 1] = sy;
+        // x half: same channels just offset by dim/2
+        cp[half + 2 * k] = cp[half + 2 * k + 1] = cx;
+        sp[half + 2 * k] = sp[half + 2 * k + 1] = sx;
+      }
+    }
+  }
+
+  return {cos_t, sin_t};
+}
 
 // apply RoPE angles to x
 Tensor apply_rotary(const Tensor& x, const Tensor& cos, const Tensor& sin) {
