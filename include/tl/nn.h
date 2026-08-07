@@ -116,6 +116,26 @@ private:
   bool use_bias_;
 };
 
+// ConvTranspose2d: opposite of Conv2d
+// each input value scatters a kernel-sized tile output
+// Implement specifically for MIRA
+// kernel_size == stride, no padding, no groups
+class ConvTranspose2d: public Module {
+public:
+  ConvTranspose2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride, bool use_bias = true);
+  Tensor forward(const Tensor& input) const override;
+  std::vector<Tensor*> parameters() override;
+  void set_weight(const Tensor& w) { weight_ = w; }
+  void set_bias(const Tensor& b) { bias_ = b; }
+  const Tensor& weight() const { return weight_; }
+  const Tensor& bias() const { return bias_; }
+private:
+  Tensor weight_; // [in_channels, out_channels, kernel_size, kernel_size]
+  Tensor bias_; // [out_channels]
+  int64_t stride_;
+  bool use_bias_;
+};
+
 // Layer normalization: normalize over trailing dims
 class LayerNorm: public Module {
 public:

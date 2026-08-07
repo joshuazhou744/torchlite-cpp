@@ -33,6 +33,122 @@ void test_nn() {
   assert(lin_batch_out.sizes()[1] == 5);
   assert(lin_batch_out.sizes()[2] == 3);
 
+  // test ConvTranspose2d: each input value scatters one k x k tile. at k == stride the
+  // tiles are disjoint, so [N, C_in, H, W] -> [N, C_out, H*k, W*k] with no accumulation.
+  {
+    tl::nn::ConvTranspose2d ct(1, 1, 2, 2, false); // C_in=1, C_out=1, k=s=2, no bias
+    auto p = ct.parameters();
+    assert(p.size() == 1);
+    assert(p[0]->sizes() == std::vector<int64_t>({1, 1, 2, 2})); // [C_in, C_out, k, k]
+
+    // kernel [[1,2],[3,4]]
+    for (int i = 0; i < 4; ++i) p[0]->data()[i] = (float)(i + 1);
+
+    // input [[10,20],[30,40]]
+    tl::Tensor x({1, 1, 2, 2});
+    x.data()[0] = 10.0f; x.data()[1] = 20.0f;
+    x.data()[2] = 30.0f; x.data()[3] = 40.0f;
+
+    tl::Tensor out = ct.forward(x);
+    assert(out.sizes() == std::vector<int64_t>({1, 1, 4, 4}));
+
+    // 10*K and 20*K on the top row of tiles, 30*K and 40*K on the bottom.
+    // this pins the transpose order: a wrong permutation keeps the shape but
+    // scrambles which pixel each tile value lands on.
+    const float want[16] = {
+      10,  20,  20,  40,
+      30,  40,  60,  80,
+      30,  60,  40,  80,
+      90, 120, 120, 160};
+    for (int i = 0; i < 16; ++i) assert(is_close(out.data()[i], want[i], 1e-4));
+  }
+
+  // ConvTranspose2d: several input channels sum into the same output channel, and the
+  // weight is indexed [C_in][C_out][u][v] -- a Conv2d-style [C_out][C_in] layout would
+  // pick the wrong values here
+  {
+    tl::nn::ConvTranspose2d ct(2, 1, 2, 2, false);
+    auto p = ct.parameters();
+    assert(p[0]->sizes() == std::vector<int64_t>({2, 1, 2, 2}));
+
+    // channel 0 writes only the top-left of its tile, channel 1 only the bottom-right
+    for (int i = 0; i < 8; ++i) p[0]->data()[i] = 0.0f;
+    p[0]->data()[0] = 1.0f; // [ci=0][co=0][0][0]
+    p[0]->data()[7] = 1.0f; // [ci=1][co=0][1][1]
+
+    tl::Tensor x({1, 2, 1, 1});
+    x.data()[0] = 5.0f; // channel 0
+    x.data()[1] = 7.0f; // channel 1
+
+    tl::Tensor out = ct.forward(x);
+    assert(out.sizes() == std::vector<int64_t>({1, 1, 2, 2}));
+    assert(is_close(out.data()[0], 5.0f, 1e-5)); // from channel 0
+    assert(is_close(out.data()[1], 0.0f, 1e-5));
+    assert(is_close(out.data()[2], 0.0f, 1e-5));
+    assert(is_close(out.data()[3], 7.0f, 1e-5)); // from channel 1
+  }
+
+  // ConvTranspose2d: output channels stay separate (k = s = 1 keeps the grid the same,
+  // so this isolates the channel mapping from the scatter)
+  {
+    tl::nn::ConvTranspose2d ct(1, 2, 1, 1, false);
+    auto p = ct.parameters();
+    assert(p[0]->sizes() == std::vector<int64_t>({1, 2, 1, 1}));
+    p[0]->data()[0] = 3.0f; // -> out channel 0
+    p[0]->data()[1] = 5.0f; // -> out channel 1
+
+    tl::Tensor x = tl::full({1, 1, 1, 1}, 2.0f);
+    tl::Tensor out = ct.forward(x);
+    assert(out.sizes() == std::vector<int64_t>({1, 2, 1, 1}));
+    assert(is_close(out.data()[0], 6.0f, 1e-5));
+    assert(is_close(out.data()[1], 10.0f, 1e-5));
+  }
+
+  // ConvTranspose2d: shape scaling and per-channel bias
+  {
+    tl::nn::ConvTranspose2d ct(3, 5, 2, 2); // with bias
+    auto p = ct.parameters();
+    assert(p.size() == 2);
+    assert(p[0]->sizes() == std::vector<int64_t>({3, 5, 2, 2}));
+    assert(p[1]->sizes() == std::vector<int64_t>({5}));
+
+    tl::Tensor out = ct.forward(tl::randn({2, 3, 3, 4}));
+    assert(out.sizes() == std::vector<int64_t>({2, 5, 6, 8})); // H*k, W*k
+    for (int64_t i = 0; i < out.numel(); ++i) assert(std::isfinite(out.data()[i]));
+
+    // zero the weight so only the bias remains: each output channel becomes constant
+    for (int64_t i = 0; i < p[0]->numel(); ++i) p[0]->data()[i] = 0.0f;
+    for (int64_t co = 0; co < 5; ++co) p[1]->data()[co] = (float)(co + 1);
+
+    tl::Tensor b_only = ct.forward(tl::randn({1, 3, 2, 2}));
+    assert(b_only.sizes() == std::vector<int64_t>({1, 5, 4, 4}));
+    for (int64_t co = 0; co < 5; ++co) {
+      for (int64_t i = 0; i < 16; ++i) { // 4x4 spatial, constant per channel
+        assert(is_close(b_only.data()[co * 16 + i], (float)(co + 1), 1e-5));
+      }
+    }
+  }
+
+  // ConvTranspose2d: unsupported configs throw rather than computing something plausible
+  {
+    bool threw = false;
+    try { tl::nn::ConvTranspose2d bad(1, 1, 4, 2); } // kernel != stride
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    tl::nn::ConvTranspose2d ct(2, 3, 2, 2, false);
+
+    threw = false;
+    try { ct.forward(tl::randn({2, 2, 4})); } // not 4D
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try { ct.forward(tl::randn({1, 5, 2, 2})); } // 5 channels vs in_channels = 2
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
   // test LayerNorm 1D shape: each group along the last dim gets mean ~0, variance ~1
   {
     tl::nn::LayerNorm ln({4});

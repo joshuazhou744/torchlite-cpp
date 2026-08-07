@@ -113,6 +113,65 @@ Tensor Conv2d::forward(const Tensor& input) const {
   return conv2d(input, weight_, use_bias_ ? bias_ : Tensor(), stride_, padding_, groups_);
 }
 
+// ConvTranspose2d
+ConvTranspose2d::ConvTranspose2d(int64_t in_channels, int64_t out_channels, int64_t kernel_size, int64_t stride, bool use_bias)
+  : weight_(scale(randn({in_channels, out_channels, kernel_size, kernel_size}), std::sqrt(2.0f / (in_channels * kernel_size * kernel_size)))),
+    bias_(use_bias ? zeros({out_channels}) : Tensor()),
+    stride_(stride),
+    use_bias_(use_bias)
+{
+  if (kernel_size != stride) {
+    throw std::invalid_argument("ConvTranspose2d: only kernel_size == stride is supported");
+  }
+  weight_.set_requires_grad(true);
+  if (use_bias_) bias_.set_requires_grad(true);
+}
+
+// [N, C_in, H, W] -> [N, C_out, H*k, W*k]
+Tensor ConvTranspose2d::forward(const Tensor& input) const {
+  if (input.sizes().size() != 4) {
+    throw std::invalid_argument("ConvTranspose2d: input must be shape [N, C_in, H, W]");
+  }
+  int64_t N = input.sizes()[0];
+  int64_t C_in = input.sizes()[1];
+  int64_t H = input.sizes()[2];
+  int64_t W = input.sizes()[3];
+  int64_t k = stride_;
+  int64_t C_out = weight_.sizes()[1];
+
+  if (C_in != weight_.sizes()[0]) {
+    throw std::invalid_argument("ConvTranspose2d: input channels must match in_channels");
+  }
+
+  // gather every spatial position into a row
+  // [N, C_in, H, W] -> [N * H * W, C_in]
+  Tensor x = transpose(transpose(input, 1, 2), 2, 3); // [N, H, W, C_in]
+  x = reshape(x, {N * H * W, C_in}); // [N * H * W, C_in]
+
+  // each input channel's scatter pattern flattened: [C_in, C_out * k * k]
+  Tensor w = reshape(weight_, {C_in, C_out * k * k});
+
+  Tensor out = matmul(x, w); // [N * H * W, C_out * k * k]
+
+  // interleave the tile offsets back into spatial dims
+  out = reshape(out, {N, H, W, C_out, k, k});
+  out = transpose(out, 1, 3); // [N, C_out, W, H, k, k]
+  out = transpose(out, 2, 3); // [N, C_out, H, W, k, k]
+  out = transpose(out, 3, 4); // [N, C_out, H, k, W, k]
+  out = reshape(out, {N, C_out, H * k, W * k});
+
+  // add bias
+  if (use_bias_) {
+    out = add(out, reshape(bias_, {1, C_out, 1, 1}));
+  }
+  return out;
+}
+
+std::vector<Tensor*> ConvTranspose2d::parameters() {
+  if (use_bias_) return {&weight_, &bias_};
+  return {&weight_};
+}
+
 // Layer normalization
 LayerNorm::LayerNorm(const std::vector<int64_t>& normalized_shape, float eps, bool elementwise_affine)
   : gamma_(elementwise_affine ? ones(normalized_shape) : Tensor()),
