@@ -913,6 +913,140 @@ void test_ops() {
     assert(threw);
   }
 
+  // test mira_rope_cos_sin_2d: h=2, w=3, dim=8, max_period=100.
+  // n = dim/4 = 2 frequencies, so the ladder is exactly its endpoints:
+  //   inv_freq[0] = 2*pi/100 = 0.0628319   (period 100 tokens, slowest)
+  //   inv_freq[1] = pi       = 3.1415927   (period 2 tokens, Nyquist)
+  // layout: channels 0,1 = y@f0  2,3 = y@f1  |  4,5 = x@f0  6,7 = x@f1
+  {
+    auto [c, s] = tl::mira_rope_cos_sin_2d(2, 3, 8, 100.0f);
+    assert(c.sizes()[0] == 6 && c.sizes()[1] == 8); // h*w rows
+    assert(s.sizes()[0] == 6 && s.sizes()[1] == 8);
+
+    const float C1 = 0.9980267f, S1 = 0.0627905f; // cos/sin of 1 * f_min
+    const float C2 = 0.9921147f, S2 = 0.1253332f; // cos/sin of 2 * f_min
+
+    // token 0 = (r=0, c=0): both coords are zero, so every angle is zero.
+    // note DINOv3's normalized coords would put token 0 at (-0.5, -2/3) instead --
+    // an exact identity here is what proves the coords are RAW token indices.
+    for (int i = 0; i < 8; ++i) {
+      assert(is_close(c.data()[i], 1.0f, 1e-5));
+      assert(is_close(s.data()[i], 0.0f, 1e-5));
+    }
+
+    // token 1 = (r=0, c=1): y angles still zero, x angles are f_min and pi
+    {
+      const float* cp = c.data() + 1 * 8;
+      const float* sp = s.data() + 1 * 8;
+      for (int i = 0; i < 4; ++i) { // y half untouched
+        assert(is_close(cp[i], 1.0f, 1e-5));
+        assert(is_close(sp[i], 0.0f, 1e-5));
+      }
+      assert(is_close(cp[4], C1, 1e-5)); assert(is_close(cp[5], C1, 1e-5));
+      assert(is_close(sp[4], S1, 1e-5)); assert(is_close(sp[5], S1, 1e-5));
+      assert(is_close(cp[6], -1.0f, 1e-5)); assert(is_close(cp[7], -1.0f, 1e-5)); // cos(pi)
+      assert(is_close(sp[6], 0.0f, 1e-5));  assert(is_close(sp[7], 0.0f, 1e-5));  // sin(pi)
+    }
+
+    // token 3 = (r=1, c=0): the mirror case, y angles active and x zero.
+    // cp[0] == cos(f_min) pins the SLOW end of the ladder at period max_period,
+    // and cp[2] == cos(pi) pins the FAST end at Nyquist.
+    {
+      const float* cp = c.data() + 3 * 8;
+      const float* sp = s.data() + 3 * 8;
+      assert(is_close(cp[0], C1, 1e-5)); assert(is_close(cp[1], C1, 1e-5));
+      assert(is_close(sp[0], S1, 1e-5)); assert(is_close(sp[1], S1, 1e-5));
+      assert(is_close(cp[2], -1.0f, 1e-5)); assert(is_close(cp[3], -1.0f, 1e-5));
+      for (int i = 4; i < 8; ++i) { // x half untouched
+        assert(is_close(cp[i], 1.0f, 1e-5));
+        assert(is_close(sp[i], 0.0f, 1e-5));
+      }
+    }
+
+    // token 5 = (r=1, c=2): both axes active, x at twice the y coordinate
+    {
+      const float* cp = c.data() + 5 * 8;
+      const float* sp = s.data() + 5 * 8;
+      assert(is_close(cp[0], C1, 1e-5));       // y coord 1
+      assert(is_close(sp[0], S1, 1e-5));
+      assert(is_close(cp[4], C2, 1e-5));       // x coord 2
+      assert(is_close(sp[4], S2, 1e-5));
+      assert(is_close(cp[6], 1.0f, 1e-5));     // cos(2*pi)
+      assert(is_close(sp[6], 0.0f, 1e-5));
+    }
+
+    // INTERLEAVED layout: channels 2k and 2k+1 share an angle
+    for (int t = 0; t < 6; ++t) {
+      for (int k = 0; k < 4; ++k) { // 2 freqs per axis, 2 axes
+        assert(is_close(c.data()[t * 8 + 2 * k], c.data()[t * 8 + 2 * k + 1]));
+        assert(is_close(s.data()[t * 8 + 2 * k], s.data()[t * 8 + 2 * k + 1]));
+      }
+    }
+
+    // and NOT the DINO half-split layout: channel i must differ from i + dim/2
+    // somewhere, otherwise this table would be built for apply_rotary_half
+    {
+      bool halves_differ = false;
+      for (int t = 0; t < 6 && !halves_differ; ++t) {
+        for (int i = 0; i < 4; ++i) {
+          if (!is_close(c.data()[t * 8 + i], c.data()[t * 8 + 4 + i], 1e-6)) {
+            halves_differ = true;
+            break;
+          }
+        }
+      }
+      assert(halves_differ);
+    }
+
+    // axis separation: moving along y changes only the first half, x only the second
+    for (int i = 0; i < 4; ++i) {
+      // token 0 (0,0) vs token 3 (1,0): same column, so the x half is identical
+      assert(is_close(c.data()[0 * 8 + 4 + i], c.data()[3 * 8 + 4 + i], 1e-6));
+      // token 0 (0,0) vs token 1 (0,1): same row, so the y half is identical
+      assert(is_close(c.data()[0 * 8 + i], c.data()[1 * 8 + i], 1e-6));
+    }
+
+    // every entry is a valid rotation: cos^2 + sin^2 == 1
+    for (int i = 0; i < 48; ++i) {
+      float m = c.data()[i] * c.data()[i] + s.data()[i] * s.data()[i];
+      assert(is_close(m, 1.0f, 1e-5));
+    }
+  }
+
+  // mira_rope_cos_sin_2d edge cases: dim = 4 gives n = 1, where the k/(n-1) term
+  // would divide by zero without the max(n-1, 1) guard. the single frequency lands
+  // on f_min, the slow end.
+  {
+    auto [c, s] = tl::mira_rope_cos_sin_2d(2, 2, 4, 100.0f);
+    assert(c.sizes()[0] == 4 && c.sizes()[1] == 4);
+
+    // token 2 = (r=1, c=0): y angle = f_min, x angle = 0
+    const float* cp = c.data() + 2 * 4;
+    const float* sp = s.data() + 2 * 4;
+    assert(is_close(cp[0], 0.9980267f, 1e-5)); // cos(f_min), not cos(pi)
+    assert(is_close(cp[1], 0.9980267f, 1e-5));
+    assert(is_close(sp[0], 0.0627905f, 1e-5));
+    assert(is_close(cp[2], 1.0f, 1e-5));       // x half at coord 0
+    assert(is_close(cp[3], 1.0f, 1e-5));
+
+    // a larger max_period slows the whole ladder: the same coord rotates less far
+    auto [c2, s2] = tl::mira_rope_cos_sin_2d(2, 2, 4, 1000.0f);
+    assert(s2.data()[2 * 4] < s.data()[2 * 4]); // smaller angle -> smaller sine
+    assert(s2.data()[2 * 4] > 0.0f);
+
+    // dim % 4 != 0 throws
+    bool threw = false;
+    try { tl::mira_rope_cos_sin_2d(2, 2, 6, 100.0f); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+
+    // max_period below Nyquist throws
+    threw = false;
+    try { tl::mira_rope_cos_sin_2d(2, 2, 8, 1.5f); }
+    catch (const std::invalid_argument&) { threw = true; }
+    assert(threw);
+  }
+
   // test apply_rotary_half: pairing is (i, i + dim/2), NOT interleaved
   {
     // needle 0 = channels (0,2) at angle pi/2, needle 1 = channels (1,3) at angle 0
